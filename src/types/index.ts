@@ -1,18 +1,30 @@
-export interface ServiceEndpoint {
+export interface GatewayRouteConfig {
+  service: string;
   path: string;
-  method: "POST" | "GET";
-  priceUsd: string;
   description: string;
+  price: string;
+  upstreamMethod?: "GET" | "POST";
+  bodyToQuery?: boolean;
+  resolveUpstream: (params: Record<string, string>) => string;
+  resolveHeaders: (params: Record<string, string>) => Record<string, string | undefined>;
 }
 
-export interface ServiceConfig {
+export interface ResolvedGatewayRoute extends GatewayRouteConfig {
+  params: Record<string, string>;
+}
+
+export interface ServiceMeta {
+  id: string;
   name: string;
-  displayName: string;
-  baseUrl: string;
-  authHeader: string;
-  authPrefix: string;
-  apiKeyEnv: string;
-  endpoints: ServiceEndpoint[];
+  description: string;
+  categories: string[];
+}
+
+export interface EndpointDefinition {
+  method: "POST";
+  path: string;
+  description: string;
+  price: string;
 }
 
 export interface MppChallenge {
@@ -55,9 +67,3 @@ export interface StatsResult {
   services: Record<string, { count: number; revenueUsd: string }>;
   period: string;
 }
-
-export type MppVariables = {
-  txSignature: string;
-  service: ServiceConfig;
-  endpoint: ServiceEndpoint;
-};
