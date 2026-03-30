@@ -237,7 +237,8 @@ export function resolveGatewayRoute(actualPath: string): ResolvedGatewayRoute | 
 
 // ── Build /services catalog ──
 
-export function buildServices() {
+export function buildServices(network: "mainnet-beta" | "devnet" = "mainnet-beta") {
+  const currency = network === "devnet" ? "SOL" : "USDC";
   return serviceMeta
     .filter((s) => enabledServiceIds.has(s.id))
     .map((service) => {
@@ -251,7 +252,7 @@ export function buildServices() {
         description: service.description,
         categories: service.categories,
         chain: "solana" as const,
-        currency: "USDC",
+        currency,
         endpoints,
       };
     })

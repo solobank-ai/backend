@@ -112,7 +112,7 @@ app.get("/health", async (c) => {
 });
 
 app.get("/services", (c) => {
-  const catalog = buildServices();
+  const catalog = buildServices(env.SOLANA_NETWORK);
   const totalEndpoints = catalog.reduce((sum, s) => sum + s.endpoints.length, 0);
   return c.json({
     network: `solana-${env.SOLANA_NETWORK}`,
