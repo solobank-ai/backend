@@ -56,14 +56,15 @@ export function createMppMiddleware(deps: MppDeps) {
       return c.json(challenge, 402);
     }
 
-    // Check replay
+    // Atomic replay protection: mark as used OR reject if already used
+    let isNew: boolean;
     try {
-      const used = await deps.redis.isUsed(signature);
-      if (used) {
-        return c.json({ error: "Transaction signature already used" }, 409);
-      }
+      isNew = await deps.redis.tryMarkUsed(signature);
     } catch {
       return c.json({ error: "Replay protection unavailable" }, 503);
+    }
+    if (!isNew) {
+      return c.json({ error: "Transaction signature already used" }, 409);
     }
 
     // Verify on-chain
@@ -88,9 +89,6 @@ export function createMppMiddleware(deps: MppDeps) {
         },
       }, 402);
     }
-
-    // Mark as used
-    await deps.redis.markUsed(signature);
 
     // Log transaction (fire-and-forget)
     deps.db
