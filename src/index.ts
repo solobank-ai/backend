@@ -67,10 +67,11 @@ app.all("/:service/*", mpp, async (c) => {
     headers["anthropic-version"] = "2023-06-01";
   }
 
+  const reqBody = c.req.method !== "GET" ? await c.req.text() : undefined;
   const upstream = await fetch(upstreamUrl, {
     method: c.req.method,
     headers,
-    body: c.req.method !== "GET" ? c.req.raw.body : undefined,
+    body: reqBody,
   });
 
   const responseHeaders = new Headers();
