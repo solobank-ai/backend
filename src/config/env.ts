@@ -6,6 +6,7 @@ import { z } from "zod";
 const envSchema = z.object({
   // Solana
   SOLANA_RPC_URL: z.string().url().default("https://api.mainnet-beta.solana.com"),
+  SOLANA_NETWORK: z.enum(["mainnet-beta", "devnet"]).default("mainnet-beta"),
   RECIPIENT_WALLET: z.string().min(32, "RECIPIENT_WALLET is required"),
 
   // API Keys (optional — only needed for enabled services)
@@ -52,6 +53,8 @@ const envSchema = z.object({
 
   // Server
   PORT: z.coerce.number().default(3001),
+  ALLOWED_ORIGINS: z.string().optional(),
+  MAX_BODY_SIZE_MB: z.coerce.number().default(10),
 });
 
 const parsed = envSchema.safeParse(process.env);

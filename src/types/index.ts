@@ -21,7 +21,7 @@ export interface ServiceMeta {
 }
 
 export interface EndpointDefinition {
-  method: "POST";
+  method: "GET" | "POST";
   path: string;
   description: string;
   price: string;
@@ -44,6 +44,7 @@ export interface VerifyResult {
   valid: boolean;
   error?: string;
   transferredRaw: bigint;
+  senderAddress?: string;
 }
 
 export interface TransactionLog {

@@ -1,20 +1,33 @@
 import { createMiddleware } from "hono/factory";
 import { resolveGatewayRoute } from "../services/registry.js";
-import type { MppChallenge } from "../types/index.js";
+import type { MppChallenge, ResolvedGatewayRoute } from "../types/index.js";
 import type { RedisStore } from "../db/redis.js";
 import type { Database } from "../db/postgres.js";
+import type { SolanaNetwork } from "../verify/solana.js";
 
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 interface MppDeps {
-  verifier: { verify(sig: string, amount: string): Promise<{ valid: boolean; error?: string; transferredRaw: bigint }> };
+  verifier: {
+    verify(sig: string, amount: string): Promise<{ valid: boolean; error?: string; transferredRaw: bigint; senderAddress?: string }>;
+    network: SolanaNetwork;
+  };
   redis: RedisStore;
   db: Database;
   recipientWallet: string;
 }
 
+export type MppVariables = {
+  route: ResolvedGatewayRoute;
+  txSignature: string;
+};
+
 export function createMppMiddleware(deps: MppDeps) {
-  return createMiddleware(async (c, next) => {
+  const isDevnet = deps.verifier.network === "devnet";
+  const networkLabel = isDevnet ? "solana-devnet" : "solana-mainnet";
+  const currency = isDevnet ? "SOL" : USDC_MINT;
+
+  return createMiddleware<{ Variables: MppVariables }>(async (c, next) => {
     const url = new URL(c.req.url);
     const route = resolveGatewayRoute(url.pathname);
 
@@ -33,9 +46,9 @@ export function createMppMiddleware(deps: MppDeps) {
         message: "Payment Required",
         payment: {
           amount: route.price,
-          currency: USDC_MINT,
+          currency,
           recipient: deps.recipientWallet,
-          network: "solana-mainnet",
+          network: networkLabel,
         },
         service: route.service,
         endpoint: route.path,
@@ -69,9 +82,9 @@ export function createMppMiddleware(deps: MppDeps) {
         detail: result.error,
         payment: {
           amount: route.price,
-          currency: USDC_MINT,
+          currency,
           recipient: deps.recipientWallet,
-          network: "solana-mainnet",
+          network: networkLabel,
         },
       }, 402);
     }
@@ -86,15 +99,15 @@ export function createMppMiddleware(deps: MppDeps) {
         service: route.service,
         endpoint: route.path,
         amountUsd: route.price,
-        agentAddress: "unknown",
+        agentAddress: result.senderAddress ?? "unknown",
         status: "success",
         createdAt: new Date(),
       })
       .catch(console.error);
 
     // Store route for proxy handler
-    (c as any).set("route", route);
-    (c as any).set("txSignature", signature);
+    c.set("route", route);
+    c.set("txSignature", signature);
 
     await next();
   });

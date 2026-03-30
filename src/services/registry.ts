@@ -15,7 +15,6 @@ const serviceMeta: ServiceMeta[] = [
   { id: "deepseek", name: "DeepSeek", description: "DeepSeek chat completions.", categories: ["ai", "llm"] },
   { id: "elevenlabs", name: "ElevenLabs", description: "Speech and sound generation.", categories: ["ai", "audio"] },
   { id: "exa", name: "Exa", description: "Search and content retrieval APIs.", categories: ["search", "web"] },
-  { id: "exchangerate", name: "ExchangeRate", description: "FX rates and currency conversion.", categories: ["finance", "fx"] },
   { id: "fal", name: "fal.ai", description: "Hosted generative media models.", categories: ["ai", "image", "audio"] },
   { id: "firecrawl", name: "Firecrawl", description: "Scrape, crawl, map, and extract web data.", categories: ["web", "data"] },
   { id: "gemini", name: "Google Gemini", description: "Gemini generation and embeddings.", categories: ["ai", "llm"] },
@@ -31,17 +30,13 @@ const serviceMeta: ServiceMeta[] = [
   { id: "openweather", name: "OpenWeather", description: "Current weather and forecasts.", categories: ["weather", "data"] },
   { id: "pdfshift", name: "PDFShift", description: "HTML-to-PDF conversion.", categories: ["documents", "rendering"] },
   { id: "perplexity", name: "Perplexity", description: "Web-grounded chat completions.", categories: ["ai", "search"] },
-  { id: "pushover", name: "Pushover", description: "Notification delivery API.", categories: ["notifications"] },
-  { id: "qrcode", name: "QR Code", description: "QR rendering API.", categories: ["utility", "media"] },
   { id: "replicate", name: "Replicate", description: "Prediction creation and status lookup.", categories: ["ai", "media"] },
   { id: "resend", name: "Resend", description: "Email send and batch send.", categories: ["communication", "email"] },
   { id: "screenshot", name: "ScreenshotOne", description: "Screenshot capture API.", categories: ["web", "media"] },
   { id: "serpapi", name: "SerpApi", description: "Search, locations, and flights.", categories: ["search", "travel"] },
   { id: "serper", name: "Serper", description: "Google search and image search.", categories: ["search"] },
-  { id: "stability", name: "Stability AI", description: "Image generation and editing.", categories: ["ai", "image"] },
   { id: "together", name: "Together AI", description: "Chat, embeddings, and image generation.", categories: ["ai", "llm"] },
   { id: "translate", name: "Google Translate", description: "Translation and language detection.", categories: ["translation", "nlp"] },
-  { id: "virustotal", name: "VirusTotal", description: "File and URL scanning.", categories: ["security", "utility"] },
 ];
 
 // ── Enabled services (expand as you add API keys) ──
@@ -191,7 +186,7 @@ const allGatewayRoutes: GatewayRouteConfig[] = [
   { service: "ipinfo", path: "/v1/lookup/:ip", description: "IP info lookup", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://ipinfo.io/${p.ip}?token=${process.env.IPINFO_API_KEY ?? ""}`, resolveHeaders: () => jsonAccept },
 
   // Jina
-  { service: "jina", path: "/v1/read/:target", description: "Jina reader", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://r.jina.ai/http://${p.target}`, resolveHeaders: () => ({ authorization: bearer("JINA_API_KEY") }) },
+  { service: "jina", path: "/v1/read/:target", description: "Jina reader", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://r.jina.ai/${p.target}`, resolveHeaders: () => ({ authorization: bearer("JINA_API_KEY") }) },
 
   // Replicate
   { service: "replicate", path: "/v1/predictions", description: "Create prediction", price: "0.03", resolveUpstream: () => "https://api.replicate.com/v1/predictions", resolveHeaders: () => ({ authorization: bearer("REPLICATE_API_KEY") }) },
@@ -248,7 +243,7 @@ export function buildServices() {
     .map((service) => {
       const endpoints: EndpointDefinition[] = gatewayRoutes
         .filter((r) => r.service === service.id)
-        .map((r) => ({ method: "POST" as const, path: r.path, description: r.description, price: r.price }));
+        .map((r) => ({ method: (r.upstreamMethod ?? "POST") as "GET" | "POST", path: r.path, description: r.description, price: r.price }));
 
       return {
         id: service.id,
