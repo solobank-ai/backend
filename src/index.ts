@@ -8,35 +8,57 @@ import { createVerifier } from "./verify/solana.js";
 import { createRedisClient } from "./db/redis.js";
 import { createDb } from "./db/postgres.js";
 import { createMppMiddleware } from "./middleware/mpp.js";
-import { proxy } from "./routes/proxy.js";
-import { services } from "./routes/services.js";
+import { buildServices } from "./services/registry.js";
 import { createStatsRoute } from "./routes/stats.js";
+import type { ResolvedGatewayRoute } from "./types/index.js";
 
-// Initialize dependencies
+// ── Initialize dependencies ──
+
 const verifier = createVerifier(env.SOLANA_RPC_URL, env.RECIPIENT_WALLET);
 const redis = createRedisClient(env.REDIS_URL);
 const db = createDb(env.DATABASE_URL);
 
-// Initialize database
 await db.initialize();
 
-// API keys map
-const apiKeys: Record<string, string> = {
-  OPENAI_API_KEY: env.OPENAI_API_KEY,
-  ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-  GROQ_API_KEY: env.GROQ_API_KEY,
-};
-
-// Create MPP middleware
 const mpp = createMppMiddleware({
   verifier,
   redis,
   db,
   recipientWallet: env.RECIPIENT_WALLET,
-  apiKeys,
 });
 
-// Build app
+// ── Fetch with retries ──
+
+function cleanHeaders(input: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(input).filter((entry): entry is [string, string] => Boolean(entry[1])),
+  );
+}
+
+async function fetchWithRetry(url: string, init: RequestInit, retries = 3): Promise<Response> {
+  let lastError: string | undefined;
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, init);
+      if (response.status < 500 || attempt === retries - 1) {
+        return response;
+      }
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (attempt === retries - 1) break;
+    }
+    await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+  }
+
+  return Response.json(
+    { error: "Upstream service unavailable after retries", detail: lastError },
+    { status: 502 },
+  );
+}
+
+// ── Build app ──
+
 const app = new Hono();
 
 app.use("*", cors());
@@ -44,41 +66,65 @@ app.use("*", logger());
 
 // Public routes
 app.get("/health", (c) => c.json({ status: "ok", network: "solana-mainnet" }));
-app.route("/services", services);
+
+app.get("/services", (c) => {
+  const catalog = buildServices();
+  const totalEndpoints = catalog.reduce((sum, s) => sum + s.endpoints.length, 0);
+  return c.json({
+    network: "solana-mainnet",
+    currency: "USDC",
+    totalServices: catalog.length,
+    totalEndpoints,
+    services: catalog,
+  });
+});
+
 app.route("/stats", createStatsRoute(db));
 
 // MPP-protected proxy routes
 app.all("/:service/*", mpp, async (c) => {
-  // Forward to proxy handler
-  const service = (c as any).get("service") as any;
-  const endpoint = (c as any).get("endpoint") as any;
-  const apiKey = (c as any).get("apiKey") as string;
-  const url = new URL(c.req.url);
-  const wildcardPath = url.pathname.replace(`/${service.name}`, "");
+  const route = (c as any).get("route") as ResolvedGatewayRoute;
+  const txSignature = (c as any).get("txSignature") as string;
 
-  const upstreamUrl = service.baseUrl + wildcardPath;
+  const bodyText = await c.req.text();
+  const method = route.upstreamMethod ?? "POST";
 
-  const headers: Record<string, string> = {
-    [service.authHeader]: service.authPrefix + apiKey,
-    "Content-Type": c.req.header("content-type") ?? "application/json",
-  };
+  // Resolve upstream URL with params
+  let upstreamUrl = route.resolveUpstream(route.params);
 
-  if (service.name === "anthropic") {
-    headers["anthropic-version"] = "2023-06-01";
+  // bodyToQuery: convert POST body to query params for GET upstreams
+  if (route.bodyToQuery && bodyText) {
+    try {
+      const query = new URLSearchParams(
+        JSON.parse(bodyText) as Record<string, string>,
+      ).toString();
+      if (query) {
+        upstreamUrl += (upstreamUrl.includes("?") ? "&" : "?") + query;
+      }
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
   }
 
-  const reqBody = c.req.method !== "GET" ? await c.req.text() : undefined;
-  const upstream = await fetch(upstreamUrl, {
-    method: c.req.method,
-    headers,
-    body: reqBody,
+  // Resolve headers with params
+  const upstreamHeaders = cleanHeaders({
+    ...(method === "POST" ? { "content-type": "application/json" } : {}),
+    ...route.resolveHeaders(route.params),
   });
 
+  // Fetch upstream with retries
+  const upstream = await fetchWithRetry(upstreamUrl, {
+    method,
+    headers: upstreamHeaders,
+    body: method === "POST" && bodyText ? bodyText : undefined,
+  });
+
+  // Build response
   const responseHeaders = new Headers();
   const contentType = upstream.headers.get("content-type");
   if (contentType) responseHeaders.set("content-type", contentType);
   responseHeaders.set("x-payment-status", "confirmed");
-  responseHeaders.set("x-payment-signature", (c as any).get("txSignature") as string);
+  responseHeaders.set("x-payment-signature", txSignature);
 
   return new Response(upstream.body, {
     status: upstream.status,
@@ -86,7 +132,8 @@ app.all("/:service/*", mpp, async (c) => {
   });
 });
 
-// Start server
+// ── Start server ──
+
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`MPP Gateway running on http://localhost:${info.port}`);
   console.log(`Services: /services`);
@@ -95,7 +142,6 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`Recipient: ${env.RECIPIENT_WALLET}`);
 });
 
-// Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nShutting down...");
   await redis.disconnect();
