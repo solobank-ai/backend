@@ -2,19 +2,19 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { bodyLimit } from "hono/body-limit";
 
 import { env } from "./config/env.js";
 import { createVerifier } from "./verify/solana.js";
 import { createRedisClient } from "./db/redis.js";
 import { createDb } from "./db/postgres.js";
-import { createMppMiddleware } from "./middleware/mpp.js";
+import { createMppMiddleware, type MppVariables } from "./middleware/mpp.js";
 import { buildServices } from "./services/registry.js";
 import { createStatsRoute } from "./routes/stats.js";
-import type { ResolvedGatewayRoute } from "./types/index.js";
 
 // ── Initialize dependencies ──
 
-const verifier = createVerifier(env.SOLANA_RPC_URL, env.RECIPIENT_WALLET);
+const verifier = createVerifier(env.SOLANA_RPC_URL, env.RECIPIENT_WALLET, env.SOLANA_NETWORK);
 const redis = createRedisClient(env.REDIS_URL);
 const db = createDb(env.DATABASE_URL);
 
@@ -59,20 +59,64 @@ async function fetchWithRetry(url: string, init: RequestInit, retries = 3): Prom
 
 // ── Build app ──
 
-const app = new Hono();
+const app = new Hono<{ Variables: MppVariables }>();
 
-app.use("*", cors());
+// CORS — restrict origins if configured
+const origins = env.ALLOWED_ORIGINS
+  ? env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["*"];
+
+app.use(
+  "*",
+  cors({
+    origin: origins.includes("*") ? "*" : origins,
+    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowHeaders: ["Content-Type", "x-payment-signature", "x-solana-signature"],
+  }),
+);
+
 app.use("*", logger());
 
-// Public routes
-app.get("/health", (c) => c.json({ status: "ok", network: "solana-mainnet" }));
+// Body size limit
+app.use(
+  "/:service/*",
+  bodyLimit({ maxSize: env.MAX_BODY_SIZE_MB * 1024 * 1024 }),
+);
+
+// ── Public routes ──
+
+app.get("/health", async (c) => {
+  const checks: Record<string, string> = {
+    server: "ok",
+    network: `solana-${env.SOLANA_NETWORK}`,
+  };
+
+  // Check Redis
+  try {
+    await redis.isUsed("__health_check__");
+    checks.redis = "ok";
+  } catch {
+    checks.redis = "error";
+  }
+
+  // Check PostgreSQL
+  try {
+    await db.getStats({ period: "1h" });
+    checks.postgres = "ok";
+  } catch {
+    checks.postgres = "error";
+  }
+
+  const healthy = checks.redis === "ok" && checks.postgres === "ok";
+  return c.json({ status: healthy ? "ok" : "degraded", ...checks }, healthy ? 200 : 503);
+});
 
 app.get("/services", (c) => {
   const catalog = buildServices();
   const totalEndpoints = catalog.reduce((sum, s) => sum + s.endpoints.length, 0);
   return c.json({
-    network: "solana-mainnet",
-    currency: "USDC",
+    network: `solana-${env.SOLANA_NETWORK}`,
+    currency: env.SOLANA_NETWORK === "devnet" ? "SOL" : "USDC",
     totalServices: catalog.length,
     totalEndpoints,
     services: catalog,
@@ -81,10 +125,11 @@ app.get("/services", (c) => {
 
 app.route("/stats", createStatsRoute(db));
 
-// MPP-protected proxy routes
+// ── MPP-protected proxy routes ──
+
 app.all("/:service/*", mpp, async (c) => {
-  const route = (c as any).get("route") as ResolvedGatewayRoute;
-  const txSignature = (c as any).get("txSignature") as string;
+  const route = c.get("route");
+  const txSignature = c.get("txSignature");
 
   const bodyText = await c.req.text();
   const method = route.upstreamMethod ?? "POST";
@@ -138,13 +183,18 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`MPP Gateway running on http://localhost:${info.port}`);
   console.log(`Services: /services`);
   console.log(`Stats: /stats`);
-  console.log(`Network: solana-mainnet`);
+  console.log(`Network: solana-${env.SOLANA_NETWORK}`);
   console.log(`Recipient: ${env.RECIPIENT_WALLET}`);
 });
 
-process.on("SIGINT", async () => {
+// ── Graceful shutdown ──
+
+async function shutdown() {
   console.log("\nShutting down...");
   await redis.disconnect();
   await db.disconnect();
   process.exit(0);
-});
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

@@ -53,6 +53,8 @@ const envSchema = z.object({
 
   // Server
   PORT: z.coerce.number().default(3001),
+  ALLOWED_ORIGINS: z.string().optional(),
+  MAX_BODY_SIZE_MB: z.coerce.number().default(10),
 });
 
 const parsed = envSchema.safeParse(process.env);
