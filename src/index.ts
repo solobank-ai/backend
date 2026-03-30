@@ -48,12 +48,13 @@ app.route("/services", services);
 app.route("/stats", createStatsRoute(db));
 
 // MPP-protected proxy routes
-app.all("/:service{[a-z]+}/*path", mpp, async (c) => {
+app.all("/:service/*", mpp, async (c) => {
   // Forward to proxy handler
   const service = (c as any).get("service") as any;
   const endpoint = (c as any).get("endpoint") as any;
   const apiKey = (c as any).get("apiKey") as string;
-  const wildcardPath = "/" + (c.req.param("path") || "");
+  const url = new URL(c.req.url);
+  const wildcardPath = url.pathname.replace(`/${service.name}`, "");
 
   const upstreamUrl = service.baseUrl + wildcardPath;
 

@@ -15,7 +15,8 @@ interface MppDeps {
 export function createMppMiddleware(deps: MppDeps) {
   return createMiddleware(async (c, next) => {
     const serviceName = c.req.param("service") ?? "";
-    const wildcardPath = "/" + (c.req.param("path") ?? "");
+    const url = new URL(c.req.url);
+    const wildcardPath = url.pathname.replace(`/${serviceName}`, "");
 
     // Look up service
     const service = getService(serviceName);
@@ -73,7 +74,15 @@ export function createMppMiddleware(deps: MppDeps) {
     }
 
     // Verify on-chain
-    const result = await deps.verifier.verify(signature, endpoint.priceUsd);
+    let result;
+    try {
+      result = await deps.verifier.verify(signature, endpoint.priceUsd);
+    } catch (err) {
+      return c.json({
+        error: "Invalid payment signature",
+        detail: err instanceof Error ? err.message : "Unknown error",
+      }, 400);
+    }
     if (!result.valid) {
       return c.json({
         error: "Payment verification failed",
