@@ -55,6 +55,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3001),
   ALLOWED_ORIGINS: z.string().optional(),
   MAX_BODY_SIZE_MB: z.coerce.number().default(10),
+  ADMIN_TOKEN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -216,6 +216,16 @@ export const gatewayRoutes = allGatewayRoutes.filter((r) => enabledServiceIds.ha
 
 // ── Path matching with :param support ──
 
+/** Reject path params containing traversal or internal-network patterns */
+function sanitizeParam(value: string): string | null {
+  const decoded = decodeURIComponent(value);
+  // Block path traversal
+  if (decoded.includes("..") || decoded.includes("//")) return null;
+  // Block SSRF to internal networks
+  if (/^https?:\/\/(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|localhost|\[::1\])/i.test(decoded)) return null;
+  return decoded;
+}
+
 function matchPath(pattern: string, actualPath: string): { matched: boolean; params: Record<string, string> } {
   const patternParts = pattern.split("/").filter(Boolean);
   const actualParts = actualPath.split("/").filter(Boolean);
@@ -227,7 +237,9 @@ function matchPath(pattern: string, actualPath: string): { matched: boolean; par
   const params: Record<string, string> = {};
   for (let i = 0; i < patternParts.length; i++) {
     if (patternParts[i].startsWith(":")) {
-      params[patternParts[i].slice(1)] = decodeURIComponent(actualParts[i]);
+      const sanitized = sanitizeParam(actualParts[i]);
+      if (sanitized === null) return { matched: false, params: {} };
+      params[patternParts[i].slice(1)] = sanitized;
     } else if (patternParts[i] !== actualParts[i]) {
       return { matched: false, params: {} };
     }

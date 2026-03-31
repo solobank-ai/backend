@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { bodyLimit } from "hono/body-limit";
+import { createMiddleware } from "hono/factory";
 
 import { env } from "./config/env.js";
 import { createVerifier } from "./verify/solana.js";
@@ -36,24 +37,27 @@ function cleanHeaders(input: Record<string, string | undefined>): Record<string,
   );
 }
 
-async function fetchWithRetry(url: string, init: RequestInit, retries = 3): Promise<Response> {
-  let lastError: string | undefined;
+const FETCH_TIMEOUT_MS = 30_000;
 
+async function fetchWithRetry(url: string, init: RequestInit, retries = 3): Promise<Response> {
   for (let attempt = 0; attempt < retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const response = await fetch(url, init);
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
       if (response.status < 500 || attempt === retries - 1) {
         return response;
       }
-    } catch (error: unknown) {
-      lastError = error instanceof Error ? error.message : String(error);
+    } catch {
+      clearTimeout(timer);
       if (attempt === retries - 1) break;
     }
     await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
   }
 
   return Response.json(
-    { error: "Upstream service unavailable after retries", detail: lastError },
+    { error: "Upstream service unavailable" },
     { status: 502 },
   );
 }
@@ -82,18 +86,14 @@ async function getDependencyHealth() {
 }
 
 function getProviderSummary() {
-  const missing = gatewayRoutes
-    .map((route) => ({
-      service: route.service,
-      path: route.path,
-      env: getMissingRequiredEnv(route),
-    }))
-    .filter((entry) => entry.env.length > 0);
+  const unconfigured = gatewayRoutes
+    .filter((route) => getMissingRequiredEnv(route).length > 0)
+    .map((route) => ({ service: route.service, path: route.path }));
 
   return {
     totalRoutes: gatewayRoutes.length,
-    configuredRoutes: gatewayRoutes.length - missing.length,
-    missing,
+    configuredRoutes: gatewayRoutes.length - unconfigured.length,
+    unconfigured,
   };
 }
 
@@ -170,11 +170,9 @@ app.get("/status", async (c) => {
       network: `solana-${env.SOLANA_NETWORK}`,
       recipient: {
         ok: recipientConfigured,
-        value: env.RECIPIENT_WALLET,
       },
       rpc: {
         ok: true,
-        value: env.SOLANA_RPC_URL,
       },
       redis: {
         ok: checks.redis === "ok",
@@ -191,6 +189,25 @@ app.get("/status", async (c) => {
     healthy && recipientConfigured ? 200 : 503,
   );
 });
+
+// Admin-only routes (require ADMIN_TOKEN via Bearer auth)
+const adminAuth = createMiddleware(async (c, next) => {
+  if (env.ADMIN_TOKEN) {
+    const auth = c.req.header("authorization");
+    if (auth !== `Bearer ${env.ADMIN_TOKEN}`) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+  }
+  await next();
+});
+
+app.use("/stats/*", adminAuth);
+app.use("/payments/*", adminAuth);
+app.use("/mpp/stats/*", adminAuth);
+app.use("/mpp/payments/*", adminAuth);
+// Also protect the root paths themselves
+app.get("/stats", adminAuth);
+app.get("/payments", adminAuth);
 
 app.route("/stats", createStatsRoute(db));
 app.route("/payments", createPaymentsRoute(db));
@@ -210,11 +227,22 @@ app.all("/:service/*", mpp, async (c) => {
   let upstreamUrl = route.resolveUpstream(route.params);
 
   // bodyToQuery: convert POST body to query params for GET upstreams
+  // Block keys that could override auth params already in the URL
+  const BLOCKED_QUERY_KEYS = new Set([
+    "api_key", "apikey", "key", "token", "access_key",
+    "x_cg_demo_api_key", "appid", "callback", "webhook",
+  ]);
+
   if (route.bodyToQuery && bodyText) {
     try {
-      const query = new URLSearchParams(
-        JSON.parse(bodyText) as Record<string, string>,
-      ).toString();
+      const parsed = JSON.parse(bodyText) as Record<string, string>;
+      const safe: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (!BLOCKED_QUERY_KEYS.has(k.toLowerCase()) && typeof v === "string") {
+          safe[k] = v;
+        }
+      }
+      const query = new URLSearchParams(safe).toString();
       if (query) {
         upstreamUrl += (upstreamUrl.includes("?") ? "&" : "?") + query;
       }
