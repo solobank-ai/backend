@@ -71,11 +71,37 @@ export interface StatsResult {
 }
 
 export interface PaymentListEntry {
-  signature: string;
+  id: number;
   service: string;
   endpoint: string;
-  amountUsd: string;
-  agentAddress: string;
+  amount: string;
+  digest: string;
+  sender: string;
   status: "success" | "failed";
   createdAt: string;
+}
+
+export interface PaymentListQuery {
+  limit: number;
+  offset: number;
+  service?: string;
+  search?: string;
+}
+
+export interface PaymentListResult {
+  payments: PaymentListEntry[];
+  total: number;
+  hasMore: boolean;
+}
+
+export interface MppServiceStat {
+  service: string;
+  count: number;
+  volume: string;
+}
+
+export interface MppStatsResult {
+  totalPayments: number;
+  totalVolume: string;
+  services: MppServiceStat[];
 }

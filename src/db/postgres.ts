@@ -1,5 +1,13 @@
 import postgres from "postgres";
-import type { PaymentListEntry, TransactionLog, StatsQuery, StatsResult } from "../types/index.js";
+import type {
+  MppStatsResult,
+  PaymentListEntry,
+  PaymentListQuery,
+  PaymentListResult,
+  TransactionLog,
+  StatsQuery,
+  StatsResult,
+} from "../types/index.js";
 
 export function createDb(url: string) {
   const sql = postgres(url);
@@ -82,9 +90,21 @@ export function createDb(url: string) {
       };
     },
 
-    async listPayments(limit = 100): Promise<PaymentListEntry[]> {
+    async listPayments(query: PaymentListQuery): Promise<PaymentListResult> {
+      const { limit, offset, service, search } = query;
+      const pattern = search ? `%${search}%` : undefined;
+
+      const where = service && pattern
+        ? sql`WHERE service = ${service} AND (signature ILIKE ${pattern} OR agent_address ILIKE ${pattern})`
+        : service
+          ? sql`WHERE service = ${service}`
+          : pattern
+            ? sql`WHERE signature ILIKE ${pattern} OR agent_address ILIKE ${pattern}`
+            : sql``;
+
       const rows = await sql`
         SELECT
+          id,
           signature,
           service,
           endpoint,
@@ -93,22 +113,66 @@ export function createDb(url: string) {
           status,
           created_at
         FROM transactions
+        ${where}
         ORDER BY created_at DESC
         LIMIT ${limit}
+        OFFSET ${offset}
       `;
 
-      return rows.map((row) => ({
-        signature: row.signature,
+      const [{ total }] = await sql`
+        SELECT COUNT(*)::int AS total
+        FROM transactions
+        ${where}
+      `;
+
+      const payments: PaymentListEntry[] = rows.map((row) => ({
+        id: row.id,
         service: row.service,
         endpoint: row.endpoint,
-        amountUsd: row.amount_usd,
-        agentAddress: row.agent_address,
+        amount: row.amount_usd,
+        digest: row.signature,
+        sender: row.agent_address,
         status: row.status,
         createdAt:
           row.created_at instanceof Date
             ? row.created_at.toISOString()
             : new Date(row.created_at).toISOString(),
       }));
+
+      return {
+        payments,
+        total,
+        hasMore: offset + payments.length < total,
+      };
+    },
+
+    async getMppStats(): Promise<MppStatsResult> {
+      const [totals] = await sql`
+        SELECT
+          COUNT(*)::int AS total_payments,
+          COALESCE(SUM(amount_usd::numeric), 0)::text AS total_volume
+        FROM transactions
+      `;
+
+      const serviceRows = await sql`
+        SELECT
+          service,
+          COUNT(*)::int AS count,
+          COALESCE(SUM(amount_usd::numeric), 0)::text AS volume
+        FROM transactions
+        GROUP BY service
+        ORDER BY COUNT(*) DESC, service ASC
+      `;
+
+      return {
+        totalPayments: totals.total_payments,
+        totalVolume: Number(totals.total_volume).toFixed(2),
+        services: serviceRows.map((row) => ({
+          service: row.service,
+          count: row.count,
+          volume: Number(row.volume).toFixed(2),
+        })),
+      };
     },
 
     async healthcheck(): Promise<void> {
