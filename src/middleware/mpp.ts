@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { resolveGatewayRoute } from "../services/registry.js";
+import { getMissingRequiredEnv, resolveGatewayRoute } from "../services/registry.js";
 import type { MppChallenge, ResolvedGatewayRoute } from "../types/index.js";
 import type { RedisStore } from "../db/redis.js";
 import type { Database } from "../db/postgres.js";
@@ -33,6 +33,19 @@ export function createMppMiddleware(deps: MppDeps) {
 
     if (!route) {
       return c.json({ error: "Unknown endpoint", path: url.pathname }, 404);
+    }
+
+    const missingEnv = getMissingRequiredEnv(route);
+    if (missingEnv.length > 0) {
+      return c.json(
+        {
+          error: "Upstream provider is not configured",
+          service: route.service,
+          endpoint: route.path,
+          missingEnv,
+        },
+        503,
+      );
     }
 
     // Check for payment signature

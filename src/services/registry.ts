@@ -57,23 +57,34 @@ function bearer(envName: string) {
 
 const jsonAccept = { accept: "application/json" };
 
+export function getMissingRequiredEnv(route: GatewayRouteConfig) {
+  return (route.requiredEnv ?? []).filter((name) => {
+    const value = process.env[name];
+    return typeof value !== "string" || value.trim().length === 0;
+  });
+}
+
+export function isRouteConfigured(route: GatewayRouteConfig) {
+  return getMissingRequiredEnv(route).length === 0;
+}
+
 // ── All gateway routes ──
 
 const allGatewayRoutes: GatewayRouteConfig[] = [
   // OpenAI
-  { service: "openai", path: "/v1/chat/completions", description: "Chat completions", price: "0.01", resolveUpstream: () => "https://api.openai.com/v1/chat/completions", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
-  { service: "openai", path: "/v1/embeddings", description: "Create embeddings", price: "0.001", resolveUpstream: () => "https://api.openai.com/v1/embeddings", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
-  { service: "openai", path: "/v1/images/generations", description: "Generate images", price: "0.05", resolveUpstream: () => "https://api.openai.com/v1/images/generations", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
-  { service: "openai", path: "/v1/audio/transcriptions", description: "Transcribe audio", price: "0.01", resolveUpstream: () => "https://api.openai.com/v1/audio/transcriptions", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
-  { service: "openai", path: "/v1/audio/speech", description: "Generate speech", price: "0.02", resolveUpstream: () => "https://api.openai.com/v1/audio/speech", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
+  { service: "openai", path: "/v1/chat/completions", description: "Chat completions", price: "0.01", requiredEnv: ["OPENAI_API_KEY"], resolveUpstream: () => "https://api.openai.com/v1/chat/completions", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
+  { service: "openai", path: "/v1/embeddings", description: "Create embeddings", price: "0.001", requiredEnv: ["OPENAI_API_KEY"], resolveUpstream: () => "https://api.openai.com/v1/embeddings", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
+  { service: "openai", path: "/v1/images/generations", description: "Generate images", price: "0.05", requiredEnv: ["OPENAI_API_KEY"], resolveUpstream: () => "https://api.openai.com/v1/images/generations", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
+  { service: "openai", path: "/v1/audio/transcriptions", description: "Transcribe audio", price: "0.01", requiredEnv: ["OPENAI_API_KEY"], resolveUpstream: () => "https://api.openai.com/v1/audio/transcriptions", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
+  { service: "openai", path: "/v1/audio/speech", description: "Generate speech", price: "0.02", requiredEnv: ["OPENAI_API_KEY"], resolveUpstream: () => "https://api.openai.com/v1/audio/speech", resolveHeaders: () => ({ authorization: bearer("OPENAI_API_KEY") }) },
 
   // Anthropic
-  { service: "anthropic", path: "/v1/messages", description: "Claude messages", price: "0.01", resolveUpstream: () => "https://api.anthropic.com/v1/messages", resolveHeaders: () => ({ "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": process.env.ANTHROPIC_VERSION ?? "2023-06-01" }) },
+  { service: "anthropic", path: "/v1/messages", description: "Claude messages", price: "0.01", requiredEnv: ["ANTHROPIC_API_KEY"], resolveUpstream: () => "https://api.anthropic.com/v1/messages", resolveHeaders: () => ({ "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": process.env.ANTHROPIC_VERSION ?? "2023-06-01" }) },
 
   // Gemini
-  { service: "gemini", path: "/v1beta/models/gemini-2.5-flash", description: "Gemini 2.5 Flash", price: "0.005", resolveUpstream: () => "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", resolveHeaders: () => ({ "x-goog-api-key": process.env.GEMINI_API_KEY }) },
-  { service: "gemini", path: "/v1beta/models/gemini-2.5-pro", description: "Gemini 2.5 Pro", price: "0.02", resolveUpstream: () => "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent", resolveHeaders: () => ({ "x-goog-api-key": process.env.GEMINI_API_KEY }) },
-  { service: "gemini", path: "/v1beta/models/embedding-001", description: "Text embeddings", price: "0.001", resolveUpstream: () => "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent", resolveHeaders: () => ({ "x-goog-api-key": process.env.GEMINI_API_KEY }) },
+  { service: "gemini", path: "/v1beta/models/gemini-2.5-flash", description: "Gemini 2.5 Flash", price: "0.005", requiredEnv: ["GEMINI_API_KEY"], resolveUpstream: () => "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", resolveHeaders: () => ({ "x-goog-api-key": process.env.GEMINI_API_KEY }) },
+  { service: "gemini", path: "/v1beta/models/gemini-2.5-pro", description: "Gemini 2.5 Pro", price: "0.02", requiredEnv: ["GEMINI_API_KEY"], resolveUpstream: () => "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent", resolveHeaders: () => ({ "x-goog-api-key": process.env.GEMINI_API_KEY }) },
+  { service: "gemini", path: "/v1beta/models/embedding-001", description: "Text embeddings", price: "0.001", requiredEnv: ["GEMINI_API_KEY"], resolveUpstream: () => "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent", resolveHeaders: () => ({ "x-goog-api-key": process.env.GEMINI_API_KEY }) },
 
   // DeepSeek
   { service: "deepseek", path: "/v1/chat/completions", description: "DeepSeek chat completions", price: "0.005", resolveUpstream: () => "https://api.deepseek.com/chat/completions", resolveHeaders: () => ({ authorization: bearer("DEEPSEEK_API_KEY") }) },
@@ -107,17 +118,17 @@ const allGatewayRoutes: GatewayRouteConfig[] = [
   { service: "fal", path: "/fal-ai/whisper", description: "Whisper transcription", price: "0.01", resolveUpstream: () => "https://fal.run/fal-ai/whisper", resolveHeaders: () => ({ authorization: `Key ${process.env.FAL_KEY ?? ""}` }) },
 
   // Firecrawl
-  { service: "firecrawl", path: "/v1/scrape", description: "Scrape a URL", price: "0.01", resolveUpstream: () => "https://api.firecrawl.dev/v1/scrape", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
-  { service: "firecrawl", path: "/v1/crawl", description: "Crawl a site", price: "0.05", resolveUpstream: () => "https://api.firecrawl.dev/v1/crawl", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
-  { service: "firecrawl", path: "/v1/map", description: "Map website URLs", price: "0.01", resolveUpstream: () => "https://api.firecrawl.dev/v1/map", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
-  { service: "firecrawl", path: "/v1/extract", description: "Extract structured data", price: "0.02", resolveUpstream: () => "https://api.firecrawl.dev/v1/extract", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
+  { service: "firecrawl", path: "/v1/scrape", description: "Scrape a URL", price: "0.01", requiredEnv: ["FIRECRAWL_API_KEY"], resolveUpstream: () => "https://api.firecrawl.dev/v1/scrape", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
+  { service: "firecrawl", path: "/v1/crawl", description: "Crawl a site", price: "0.05", requiredEnv: ["FIRECRAWL_API_KEY"], resolveUpstream: () => "https://api.firecrawl.dev/v1/crawl", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
+  { service: "firecrawl", path: "/v1/map", description: "Map website URLs", price: "0.01", requiredEnv: ["FIRECRAWL_API_KEY"], resolveUpstream: () => "https://api.firecrawl.dev/v1/map", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
+  { service: "firecrawl", path: "/v1/extract", description: "Extract structured data", price: "0.02", requiredEnv: ["FIRECRAWL_API_KEY"], resolveUpstream: () => "https://api.firecrawl.dev/v1/extract", resolveHeaders: () => ({ authorization: bearer("FIRECRAWL_API_KEY") }) },
 
   // Brave Search
-  { service: "brave", path: "/v1/web/search", description: "Web search", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/web/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
-  { service: "brave", path: "/v1/images/search", description: "Image search", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/images/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
-  { service: "brave", path: "/v1/news/search", description: "News search", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/news/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
-  { service: "brave", path: "/v1/videos/search", description: "Video search", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/videos/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
-  { service: "brave", path: "/v1/summarizer/search", description: "Summarized search", price: "0.01", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/summarizer/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
+  { service: "brave", path: "/v1/web/search", description: "Web search", price: "0.005", requiredEnv: ["BRAVE_SEARCH_API_KEY"], upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/web/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
+  { service: "brave", path: "/v1/images/search", description: "Image search", price: "0.005", requiredEnv: ["BRAVE_SEARCH_API_KEY"], upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/images/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
+  { service: "brave", path: "/v1/news/search", description: "News search", price: "0.005", requiredEnv: ["BRAVE_SEARCH_API_KEY"], upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/news/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
+  { service: "brave", path: "/v1/videos/search", description: "Video search", price: "0.005", requiredEnv: ["BRAVE_SEARCH_API_KEY"], upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/videos/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
+  { service: "brave", path: "/v1/summarizer/search", description: "Summarized search", price: "0.01", requiredEnv: ["BRAVE_SEARCH_API_KEY"], upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.search.brave.com/res/v1/summarizer/search", resolveHeaders: () => ({ ...jsonAccept, "x-subscription-token": process.env.BRAVE_SEARCH_API_KEY }) },
 
   // Exa
   { service: "exa", path: "/v1/search", description: "Exa search", price: "0.005", resolveUpstream: () => "https://api.exa.ai/search", resolveHeaders: () => ({ "x-api-key": process.env.EXA_API_KEY }) },
@@ -243,7 +254,7 @@ export function buildServices(network: "mainnet-beta" | "devnet" = "mainnet-beta
     .filter((s) => enabledServiceIds.has(s.id))
     .map((service) => {
       const endpoints: EndpointDefinition[] = gatewayRoutes
-        .filter((r) => r.service === service.id)
+        .filter((r) => r.service === service.id && isRouteConfigured(r))
         .map((r) => ({ method: (r.upstreamMethod ?? "POST") as "GET" | "POST", path: r.path, description: r.description, price: r.price }));
 
       return {

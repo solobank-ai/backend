@@ -9,8 +9,9 @@ import { createVerifier } from "./verify/solana.js";
 import { createRedisClient } from "./db/redis.js";
 import { createDb } from "./db/postgres.js";
 import { createMppMiddleware, type MppVariables } from "./middleware/mpp.js";
-import { buildServices } from "./services/registry.js";
+import { buildServices, gatewayRoutes, getMissingRequiredEnv } from "./services/registry.js";
 import { createStatsRoute } from "./routes/stats.js";
+import { createPaymentsRoute } from "./routes/payments.js";
 
 // ── Initialize dependencies ──
 
@@ -57,6 +58,45 @@ async function fetchWithRetry(url: string, init: RequestInit, retries = 3): Prom
   );
 }
 
+async function getDependencyHealth() {
+  const checks: Record<string, string> = {
+    server: "ok",
+    network: `solana-${env.SOLANA_NETWORK}`,
+  };
+
+  try {
+    await redis.isUsed("__health_check__");
+    checks.redis = "ok";
+  } catch {
+    checks.redis = "error";
+  }
+
+  try {
+    await db.healthcheck();
+    checks.postgres = "ok";
+  } catch {
+    checks.postgres = "error";
+  }
+
+  return checks;
+}
+
+function getProviderSummary() {
+  const missing = gatewayRoutes
+    .map((route) => ({
+      service: route.service,
+      path: route.path,
+      env: getMissingRequiredEnv(route),
+    }))
+    .filter((entry) => entry.env.length > 0);
+
+  return {
+    totalRoutes: gatewayRoutes.length,
+    configuredRoutes: gatewayRoutes.length - missing.length,
+    missing,
+  };
+}
+
 // ── Build app ──
 
 const app = new Hono<{ Variables: MppVariables }>();
@@ -71,7 +111,12 @@ app.use(
   cors({
     origin: origins.includes("*") ? "*" : origins,
     allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["Content-Type", "x-payment-signature", "x-solana-signature"],
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-payment-signature",
+      "x-solana-signature",
+    ],
   }),
 );
 
@@ -86,29 +131,19 @@ app.use(
 // ── Public routes ──
 
 app.get("/health", async (c) => {
-  const checks: Record<string, string> = {
-    server: "ok",
-    network: `solana-${env.SOLANA_NETWORK}`,
-  };
-
-  // Check Redis
-  try {
-    await redis.isUsed("__health_check__");
-    checks.redis = "ok";
-  } catch {
-    checks.redis = "error";
-  }
-
-  // Check PostgreSQL
-  try {
-    await db.getStats({ period: "1h" });
-    checks.postgres = "ok";
-  } catch {
-    checks.postgres = "error";
-  }
+  const checks = await getDependencyHealth();
+  const providers = getProviderSummary();
 
   const healthy = checks.redis === "ok" && checks.postgres === "ok";
-  return c.json({ status: healthy ? "ok" : "degraded", ...checks }, healthy ? 200 : 503);
+  return c.json(
+    {
+      status: healthy ? "ok" : "degraded",
+      ...checks,
+      configuredRoutes: providers.configuredRoutes,
+      totalRoutes: providers.totalRoutes,
+    },
+    healthy ? 200 : 503,
+  );
 });
 
 app.get("/services", (c) => {
@@ -123,7 +158,44 @@ app.get("/services", (c) => {
   });
 });
 
+app.get("/status", async (c) => {
+  const checks = await getDependencyHealth();
+  const providers = getProviderSummary();
+  const recipientConfigured = env.RECIPIENT_WALLET.trim().length > 0;
+  const healthy = checks.redis === "ok" && checks.postgres === "ok";
+
+  return c.json(
+    {
+      ok: healthy && recipientConfigured,
+      network: `solana-${env.SOLANA_NETWORK}`,
+      recipient: {
+        ok: recipientConfigured,
+        value: env.RECIPIENT_WALLET,
+      },
+      rpc: {
+        ok: true,
+        value: env.SOLANA_RPC_URL,
+      },
+      redis: {
+        ok: checks.redis === "ok",
+      },
+      database: {
+        ok: checks.postgres === "ok",
+      },
+      storage: {
+        mode: "postgres",
+        replay: "redis",
+      },
+      providers,
+    },
+    healthy && recipientConfigured ? 200 : 503,
+  );
+});
+
 app.route("/stats", createStatsRoute(db));
+app.route("/payments", createPaymentsRoute(db));
+app.route("/mpp/stats", createStatsRoute(db));
+app.route("/mpp/payments", createPaymentsRoute(db));
 
 // ── MPP-protected proxy routes ──
 
@@ -182,7 +254,11 @@ app.all("/:service/*", mpp, async (c) => {
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`MPP Gateway running on http://localhost:${info.port}`);
   console.log(`Services: /services`);
+  console.log(`Status: /status`);
   console.log(`Stats: /stats`);
+  console.log(`Payments: /payments`);
+  console.log(`MPP Stats: /mpp/stats`);
+  console.log(`MPP Payments: /mpp/payments`);
   console.log(`Network: solana-${env.SOLANA_NETWORK}`);
   console.log(`Recipient: ${env.RECIPIENT_WALLET}`);
 });

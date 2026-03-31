@@ -3,6 +3,7 @@ export interface GatewayRouteConfig {
   path: string;
   description: string;
   price: string;
+  requiredEnv?: string[];
   upstreamMethod?: "GET" | "POST";
   bodyToQuery?: boolean;
   resolveUpstream: (params: Record<string, string>) => string;
@@ -67,4 +68,14 @@ export interface StatsResult {
   totalRevenueUsd: string;
   services: Record<string, { count: number; revenueUsd: string }>;
   period: string;
+}
+
+export interface PaymentListEntry {
+  signature: string;
+  service: string;
+  endpoint: string;
+  amountUsd: string;
+  agentAddress: string;
+  status: "success" | "failed";
+  createdAt: string;
 }

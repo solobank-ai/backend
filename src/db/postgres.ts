@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import type { TransactionLog, StatsQuery, StatsResult } from "../types/index.js";
+import type { PaymentListEntry, TransactionLog, StatsQuery, StatsResult } from "../types/index.js";
 
 export function createDb(url: string) {
   const sql = postgres(url);
@@ -80,6 +80,39 @@ export function createDb(url: string) {
         services,
         period,
       };
+    },
+
+    async listPayments(limit = 100): Promise<PaymentListEntry[]> {
+      const rows = await sql`
+        SELECT
+          signature,
+          service,
+          endpoint,
+          amount_usd,
+          agent_address,
+          status,
+          created_at
+        FROM transactions
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+
+      return rows.map((row) => ({
+        signature: row.signature,
+        service: row.service,
+        endpoint: row.endpoint,
+        amountUsd: row.amount_usd,
+        agentAddress: row.agent_address,
+        status: row.status,
+        createdAt:
+          row.created_at instanceof Date
+            ? row.created_at.toISOString()
+            : new Date(row.created_at).toISOString(),
+      }));
+    },
+
+    async healthcheck(): Promise<void> {
+      await sql`SELECT 1`;
     },
 
     async disconnect(): Promise<void> {
