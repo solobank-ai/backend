@@ -1,4 +1,10 @@
-import { createSolanaRpc, signature as toSignature } from "@solana/kit";
+import {
+  createSolanaRpc,
+  signature as toSignature,
+  getTransactionDecoder,
+  getCompiledTransactionMessageDecoder,
+  getSignatureFromTransaction,
+} from "@solana/kit";
 import type { VerifyResult } from "../types/index.js";
 
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -151,6 +157,59 @@ function extractSolTransfers(
     }
   }
   return transfers;
+}
+
+// ── Raw transaction parsing (fast-path, no RPC getTransaction needed) ──
+
+const SYSTEM_PROGRAM = "11111111111111111111111111111111";
+
+/**
+ * Parse a raw signed transaction (base64) to extract SOL transfer details.
+ * Returns null if it's not a simple system transfer.
+ */
+function parseRawSolTransfer(
+  rawTxBase64: string,
+  expectedRecipient: string,
+): { sender: string; recipient: string; lamports: bigint; signature: string } | null {
+  try {
+    const txBytes = Buffer.from(rawTxBase64, "base64");
+    const txDecoder = getTransactionDecoder();
+    const tx = txDecoder.decode(txBytes);
+    const sig = getSignatureFromTransaction(tx);
+
+    const msgDecoder = getCompiledTransactionMessageDecoder();
+    const msg = msgDecoder.decode(tx.messageBytes);
+
+    const accounts = msg.staticAccounts;
+
+    // Find system transfer instruction to recipient
+    for (const ix of msg.instructions) {
+      const program = accounts[ix.programAddressIndex];
+      if (String(program) !== SYSTEM_PROGRAM) continue;
+      if (!ix.data || ix.data.length < 12) continue;
+
+      // System program Transfer: u32 instruction_index (2) + u64 lamports
+      const view = new DataView(ix.data.buffer, ix.data.byteOffset, ix.data.byteLength);
+      const ixIndex = view.getUint32(0, true);
+      if (ixIndex !== 2) continue; // 2 = Transfer
+
+      const lamportsLow = view.getUint32(4, true);
+      const lamportsHigh = view.getUint32(8, true);
+      const lamports = BigInt(lamportsLow) | (BigInt(lamportsHigh) << 32n);
+
+      // accountIndices[0] = sender, accountIndices[1] = recipient
+      if (!ix.accountIndices || ix.accountIndices.length < 2) continue;
+      const recipient = String(accounts[ix.accountIndices[1]]);
+      const sender = String(accounts[ix.accountIndices[0]]);
+
+      if (recipient === expectedRecipient) {
+        return { sender, recipient, lamports, signature: sig };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Main verifier ──
@@ -335,8 +394,56 @@ export function createVerifier(
     return { valid: true, transferredRaw: totalLamports, senderAddress };
   }
 
+  // ── Fast-path: verify with raw tx bytes (no getTransaction needed) ──
+
+  async function verifyDevnetFast(
+    sig: string,
+    expectedAmount: string,
+    rawTxBase64: string,
+  ): Promise<VerifyResult> {
+    const expectedLamports = parseAmountToRaw(expectedAmount, SOL_DECIMALS);
+
+    // 1. Parse raw transaction locally (instant)
+    const parsed = parseRawSolTransfer(rawTxBase64, recipientAddress);
+    if (!parsed) {
+      // Fall back to full verification
+      return verifyDevnet(sig, expectedAmount);
+    }
+
+    // 2. Verify signature in raw tx matches the claimed signature
+    if (parsed.signature !== sig) {
+      return { valid: false, error: "Signature mismatch", transferredRaw: 0n };
+    }
+
+    // 3. Verify amount
+    if (parsed.lamports < expectedLamports) {
+      return {
+        valid: false,
+        error: `Insufficient payment: received ${parsed.lamports} lamports, expected ${expectedLamports}`,
+        transferredRaw: parsed.lamports,
+        senderAddress: parsed.sender,
+      };
+    }
+
+    // 4. Confirm on-chain via getSignatureStatuses (fast, no indexing)
+    const confirmed = await waitForConfirmation(sig);
+    if (!confirmed) {
+      return { valid: false, error: "Transaction not confirmed on-chain", transferredRaw: 0n };
+    }
+
+    return {
+      valid: true,
+      transferredRaw: parsed.lamports,
+      senderAddress: parsed.sender,
+    };
+  }
+
+  const verifyFn = isDevnet ? verifyDevnet : verifyMainnet;
+
   return {
-    verify: isDevnet ? verifyDevnet : verifyMainnet,
+    verify: verifyFn,
+    /** Fast verification using raw tx bytes — skips getTransaction entirely */
+    verifyFast: isDevnet ? verifyDevnetFast : undefined,
     network,
   };
 }

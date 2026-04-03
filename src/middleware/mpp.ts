@@ -10,6 +10,7 @@ const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 interface MppDeps {
   verifier: {
     verify(sig: string, amount: string): Promise<{ valid: boolean; error?: string; transferredRaw: bigint; senderAddress?: string }>;
+    verifyFast?(sig: string, amount: string, rawTxBase64: string): Promise<{ valid: boolean; error?: string; transferredRaw: bigint; senderAddress?: string }>;
     network: SolanaNetwork;
   };
   redis: RedisStore;
@@ -72,9 +73,15 @@ export function createMppMiddleware(deps: MppDeps) {
     }
 
     // 1. Verify on-chain FIRST (before marking as used)
+    //    Fast-path: if client sends raw tx bytes, skip getTransaction entirely
+    const rawTx = c.req.header("x-payment-transaction");
     let result;
     try {
-      result = await deps.verifier.verify(signature, route.price);
+      if (rawTx && deps.verifier.verifyFast) {
+        result = await deps.verifier.verifyFast(signature, route.price, rawTx);
+      } else {
+        result = await deps.verifier.verify(signature, route.price);
+      }
     } catch {
       return c.json({ error: "Payment verification failed" }, 400);
     }
