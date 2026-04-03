@@ -9,6 +9,9 @@ vi.mock("@solana/kit", () => ({
     getTransaction: () => ({
       send: mockSend,
     }),
+    getSignatureStatuses: () => ({
+      send: vi.fn().mockResolvedValue({ value: [{ confirmationStatus: "confirmed" }] }),
+    }),
   }),
   signature: (s: string) => s,
 }));

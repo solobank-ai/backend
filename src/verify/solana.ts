@@ -4,7 +4,8 @@ import type { VerifyResult } from "../types/index.js";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDC_DECIMALS = 6;
 const SOL_DECIMALS = 9;
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 10;
+const RETRY_INTERVAL_MS = 200;
 const MAX_TX_AGE_SECONDS = 300; // 5 minutes
 
 function parseAmountToRaw(amount: string, decimals: number): bigint {
@@ -162,27 +163,50 @@ export function createVerifier(
   const rpc = createSolanaRpc(rpcUrl);
   const isDevnet = network === "devnet";
 
-  async function fetchTransaction(sig: string): Promise<any> {
+  async function waitForConfirmation(sig: string): Promise<boolean> {
     const txSignature = toSignature(sig);
-    let tx: any = null;
-
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        tx = await rpc
+        const result = await rpc
+          .getSignatureStatuses([txSignature])
+          .send();
+        const status = result.value?.[0];
+        if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") {
+          return true;
+        }
+      } catch {
+        // RPC error, retry
+      }
+      await new Promise((r) => setTimeout(r, RETRY_INTERVAL_MS));
+    }
+    return false;
+  }
+
+  async function fetchTransaction(sig: string): Promise<any> {
+    const txSignature = toSignature(sig);
+
+    // Phase 1: fast poll with getSignatureStatuses (lightweight RPC call)
+    const confirmed = await waitForConfirmation(sig);
+    if (!confirmed) return null;
+
+    // Phase 2: fetch full transaction (should succeed immediately after confirmation)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const tx = await rpc
           .getTransaction(txSignature, {
             commitment: "confirmed",
             encoding: "jsonParsed",
             maxSupportedTransactionVersion: 0,
           })
           .send();
+        if (tx) return tx;
       } catch {
         // RPC error, retry
       }
-      if (tx) break;
-      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, RETRY_INTERVAL_MS));
     }
 
-    return tx;
+    return null;
   }
 
   function checkTxBasics(tx: any): string | null {
