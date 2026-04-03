@@ -4,8 +4,10 @@ import type { VerifyResult } from "../types/index.js";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDC_DECIMALS = 6;
 const SOL_DECIMALS = 9;
-const MAX_RETRIES = 10;
-const RETRY_INTERVAL_MS = 200;
+const STATUS_RETRIES = 30;
+const STATUS_INTERVAL_MS = 100;
+const TX_RETRIES = 5;
+const TX_INTERVAL_MS = 150;
 const MAX_TX_AGE_SECONDS = 300; // 5 minutes
 
 function parseAmountToRaw(amount: string, decimals: number): bigint {
@@ -165,19 +167,19 @@ export function createVerifier(
 
   async function waitForConfirmation(sig: string): Promise<boolean> {
     const txSignature = toSignature(sig);
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    for (let i = 0; i < STATUS_RETRIES; i++) {
       try {
-        const result = await rpc
-          .getSignatureStatuses([txSignature])
-          .send();
-        const status = result.value?.[0];
-        if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") {
+        const res = await rpc.getSignatureStatuses([txSignature]).send();
+        const status = res?.value?.[0];
+        if (status?.confirmationStatus === "confirmed" ||
+            status?.confirmationStatus === "finalized") {
+          if (status.err) return false; // tx failed
           return true;
         }
       } catch {
-        // RPC error, retry
+        // retry
       }
-      await new Promise((r) => setTimeout(r, RETRY_INTERVAL_MS));
+      await new Promise((r) => setTimeout(r, STATUS_INTERVAL_MS));
     }
     return false;
   }
@@ -185,12 +187,12 @@ export function createVerifier(
   async function fetchTransaction(sig: string): Promise<any> {
     const txSignature = toSignature(sig);
 
-    // Phase 1: fast poll with getSignatureStatuses (lightweight RPC call)
+    // Phase 1: fast confirmation check via getSignatureStatuses
     const confirmed = await waitForConfirmation(sig);
     if (!confirmed) return null;
 
-    // Phase 2: fetch full transaction (should succeed immediately after confirmation)
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Phase 2: fetch parsed transaction (should be indexed by now)
+    for (let attempt = 0; attempt < TX_RETRIES; attempt++) {
       try {
         const tx = await rpc
           .getTransaction(txSignature, {
@@ -201,9 +203,9 @@ export function createVerifier(
           .send();
         if (tx) return tx;
       } catch {
-        // RPC error, retry
+        // not yet indexed, retry
       }
-      await new Promise((r) => setTimeout(r, RETRY_INTERVAL_MS));
+      await new Promise((r) => setTimeout(r, TX_INTERVAL_MS));
     }
 
     return null;
