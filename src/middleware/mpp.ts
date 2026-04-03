@@ -75,6 +75,7 @@ export function createMppMiddleware(deps: MppDeps) {
     // 1. Verify on-chain FIRST (before marking as used)
     //    Fast-path: if client sends raw tx bytes, skip getTransaction entirely
     const rawTx = c.req.header("x-payment-transaction");
+    const verifyStart = performance.now();
     let result;
     try {
       if (rawTx && deps.verifier.verifyFast) {
@@ -85,6 +86,8 @@ export function createMppMiddleware(deps: MppDeps) {
     } catch {
       return c.json({ error: "Payment verification failed" }, 400);
     }
+    const verifyMs = Math.round(performance.now() - verifyStart);
+    c.header("x-verify-ms", String(verifyMs));
     if (!result.valid) {
       return c.json({
         error: "Payment verification failed",
