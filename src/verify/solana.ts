@@ -207,7 +207,8 @@ function parseRawSolTransfer(
       }
     }
     return null;
-  } catch {
+  } catch (err) {
+    console.error("[fast-path] parseRawSolTransfer failed:", err);
     return null;
   }
 }
@@ -403,12 +404,16 @@ export function createVerifier(
   ): Promise<VerifyResult> {
     const expectedLamports = parseAmountToRaw(expectedAmount, SOL_DECIMALS);
 
+    console.log(`[fast-path] verifyDevnetFast called, rawTx length=${rawTxBase64.length}`);
+
     // 1. Parse raw transaction locally (instant)
     const parsed = parseRawSolTransfer(rawTxBase64, recipientAddress);
     if (!parsed) {
+      console.log("[fast-path] parseRawSolTransfer returned null, falling back to slow path");
       // Fall back to full verification
       return verifyDevnet(sig, expectedAmount);
     }
+    console.log(`[fast-path] parsed OK: lamports=${parsed.lamports}, sig match=${parsed.signature === sig}`);
 
     // 2. Verify signature in raw tx matches the claimed signature
     if (parsed.signature !== sig) {
