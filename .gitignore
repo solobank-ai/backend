@@ -4,4 +4,5 @@ dist/
 *.log
 .env.*
 !.env.example
-test-payment.ts
+!.env.devnet.example
+!.env.mainnet.example
