@@ -37,6 +37,26 @@ const serviceMeta: ServiceMeta[] = [
   { id: "serper", name: "Serper", description: "Google search and image search.", categories: ["search"] },
   { id: "together", name: "Together AI", description: "Chat, embeddings, and image generation.", categories: ["ai", "llm"] },
   { id: "translate", name: "Google Translate", description: "Translation and language detection.", categories: ["translation", "nlp"] },
+  { id: "stability", name: "Stability AI", description: "Image generation with Stable Diffusion models.", categories: ["ai", "image"] },
+  { id: "huggingface", name: "Hugging Face", description: "Serverless inference for thousands of models.", categories: ["ai", "llm"] },
+  { id: "ai21", name: "AI21 Labs", description: "Jamba chat completions and summarization.", categories: ["ai", "llm"] },
+  { id: "runway", name: "Runway", description: "AI video generation from text and images.", categories: ["ai", "media"] },
+  { id: "twilio", name: "Twilio", description: "SMS messaging.", categories: ["communication"] },
+  { id: "sendgrid", name: "SendGrid", description: "Transactional email delivery.", categories: ["communication", "email"] },
+  { id: "birdeye", name: "Birdeye", description: "Solana DeFi token prices, OHLCV, and trades.", categories: ["crypto", "market-data"] },
+  { id: "dexscreener", name: "DexScreener", description: "DEX pair and token data across chains.", categories: ["crypto", "market-data"] },
+  { id: "helius", name: "Helius", description: "Solana enhanced transactions and DAS API.", categories: ["crypto", "data"] },
+  { id: "jupiter", name: "Jupiter", description: "Solana token pricing and swap quotes.", categories: ["crypto", "market-data"] },
+  { id: "notion", name: "Notion", description: "Query and create pages in Notion.", categories: ["data"] },
+  { id: "linear", name: "Linear", description: "Issue tracking via GraphQL API.", categories: ["data", "code"] },
+  { id: "airtable", name: "Airtable", description: "Read and write Airtable records.", categories: ["data"] },
+  { id: "clearbit", name: "Clearbit", description: "Person and company data enrichment.", categories: ["sales", "data"] },
+  { id: "wolfram", name: "Wolfram Alpha", description: "Computational knowledge and math.", categories: ["data", "compute"] },
+  { id: "polygon", name: "Polygon.io", description: "Real-time stock and crypto market data.", categories: ["finance", "market-data"] },
+  { id: "openrouter", name: "OpenRouter", description: "Unified access to 100+ LLMs.", categories: ["ai", "llm"] },
+  { id: "crunchbase", name: "Crunchbase", description: "Startup and company funding data.", categories: ["data", "finance"] },
+  { id: "tavily", name: "Tavily", description: "AI-optimized web search for agents.", categories: ["search", "ai"] },
+  { id: "pinecone", name: "Pinecone", description: "Vector database for embeddings.", categories: ["ai", "data"] },
 ];
 
 // ── Enabled services (expand as you add API keys) ──
@@ -74,6 +94,26 @@ export const enabledServiceIds = new Set([
   "replicate",
   "screenshot",
   "pdfshift",
+  "stability",
+  "huggingface",
+  "ai21",
+  "runway",
+  "twilio",
+  "sendgrid",
+  "birdeye",
+  "dexscreener",
+  "helius",
+  "jupiter",
+  "notion",
+  "linear",
+  "airtable",
+  "clearbit",
+  "wolfram",
+  "polygon",
+  "openrouter",
+  "crunchbase",
+  "tavily",
+  "pinecone",
 ]);
 
 // ── Helpers ──
@@ -237,6 +277,83 @@ const allGatewayRoutes: GatewayRouteConfig[] = [
 
   // PDFShift
   { service: "pdfshift", path: "/v1/convert", description: "Convert HTML to PDF", price: "0.01", resolveUpstream: () => "https://api.pdfshift.io/v3/convert/pdf", resolveHeaders: () => ({ "x-api-key": process.env.PDFSHIFT_API_KEY }) },
+
+  // Stability AI
+  { service: "stability", path: "/v1/generate/sd3", description: "SD3 image generation", price: "0.03", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/sd3", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
+  { service: "stability", path: "/v1/generate/core", description: "Stable Image Core", price: "0.03", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/core", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
+  { service: "stability", path: "/v1/generate/ultra", description: "Stable Image Ultra", price: "0.05", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/ultra", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
+
+  // Hugging Face
+  { service: "huggingface", path: "/v1/models/:modelId", description: "Run model inference", price: "0.005", resolveUpstream: (p) => `https://api-inference.huggingface.co/models/${p.modelId}`, resolveHeaders: () => ({ authorization: bearer("HUGGINGFACE_API_KEY") }) },
+
+  // AI21 Labs
+  { service: "ai21", path: "/v1/chat/completions", description: "Chat completions", price: "0.01", resolveUpstream: () => "https://api.ai21.com/studio/v1/chat/completions", resolveHeaders: () => ({ authorization: bearer("AI21_API_KEY") }) },
+  { service: "ai21", path: "/v1/summarize", description: "Text summarization", price: "0.005", resolveUpstream: () => "https://api.ai21.com/studio/v1/summarize", resolveHeaders: () => ({ authorization: bearer("AI21_API_KEY") }) },
+
+  // Runway
+  { service: "runway", path: "/v1/image_to_video", description: "Image-to-video generation", price: "0.10", resolveUpstream: () => "https://api.dev.runwayml.com/v1/image_to_video", resolveHeaders: () => ({ authorization: bearer("RUNWAYML_API_SECRET") }) },
+  { service: "runway", path: "/v1/tasks/:id", description: "Check generation status", price: "0.001", upstreamMethod: "GET", resolveUpstream: (p) => `https://api.dev.runwayml.com/v1/tasks/${p.id}`, resolveHeaders: () => ({ authorization: bearer("RUNWAYML_API_SECRET") }) },
+
+  // Twilio
+  { service: "twilio", path: "/v1/messages", description: "Send SMS", price: "0.02", requiredEnv: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"], resolveUpstream: () => `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`, resolveHeaders: () => ({ authorization: `Basic ${Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString("base64")}` }) },
+
+  // SendGrid
+  { service: "sendgrid", path: "/v1/mail/send", description: "Send email", price: "0.005", resolveUpstream: () => "https://api.sendgrid.com/v3/mail/send", resolveHeaders: () => ({ authorization: bearer("SENDGRID_API_KEY") }) },
+
+  // Birdeye
+  { service: "birdeye", path: "/v1/price", description: "Token price", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://public-api.birdeye.so/defi/price", resolveHeaders: () => ({ "x-api-key": process.env.BIRDEYE_API_KEY, ...jsonAccept }) },
+  { service: "birdeye", path: "/v1/ohlcv", description: "OHLCV candle data", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://public-api.birdeye.so/defi/ohlcv", resolveHeaders: () => ({ "x-api-key": process.env.BIRDEYE_API_KEY, ...jsonAccept }) },
+  { service: "birdeye", path: "/v1/trades", description: "Token trade history", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://public-api.birdeye.so/defi/txs/token", resolveHeaders: () => ({ "x-api-key": process.env.BIRDEYE_API_KEY, ...jsonAccept }) },
+
+  // DexScreener
+  { service: "dexscreener", path: "/v1/pairs/:chainId/:tokenAddress", description: "Get token pairs", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://api.dexscreener.com/token-pairs/v1/${p.chainId}/${p.tokenAddress}`, resolveHeaders: () => jsonAccept },
+  { service: "dexscreener", path: "/v1/tokens/:tokenAddresses", description: "Multi-token lookup", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://api.dexscreener.com/tokens/v1/${p.tokenAddresses}`, resolveHeaders: () => jsonAccept },
+
+  // Helius
+  { service: "helius", path: "/v1/transactions", description: "Parse enhanced transactions", price: "0.005", resolveUpstream: () => `https://api.helius.xyz/v0/transactions?api-key=${process.env.HELIUS_API_KEY ?? ""}`, resolveHeaders: () => jsonAccept },
+  { service: "helius", path: "/v1/addresses/:address/transactions", description: "Address history", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://api.helius.xyz/v0/addresses/${p.address}/transactions?api-key=${process.env.HELIUS_API_KEY ?? ""}`, resolveHeaders: () => jsonAccept },
+
+  // Jupiter
+  { service: "jupiter", path: "/v1/price", description: "Token price lookup", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.jup.ag/price/v2", resolveHeaders: () => jsonAccept },
+  { service: "jupiter", path: "/v1/quote", description: "Swap quote", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://api.jup.ag/quote/v6", resolveHeaders: () => jsonAccept },
+
+  // Notion
+  { service: "notion", path: "/v1/databases/:databaseId/query", description: "Query database", price: "0.005", resolveUpstream: (p) => `https://api.notion.com/v1/databases/${p.databaseId}/query`, resolveHeaders: () => ({ authorization: bearer("NOTION_API_KEY"), "notion-version": "2022-06-28" }) },
+  { service: "notion", path: "/v1/pages", description: "Create page", price: "0.005", resolveUpstream: () => "https://api.notion.com/v1/pages", resolveHeaders: () => ({ authorization: bearer("NOTION_API_KEY"), "notion-version": "2022-06-28" }) },
+  { service: "notion", path: "/v1/search", description: "Search workspace", price: "0.005", resolveUpstream: () => "https://api.notion.com/v1/search", resolveHeaders: () => ({ authorization: bearer("NOTION_API_KEY"), "notion-version": "2022-06-28" }) },
+
+  // Linear
+  { service: "linear", path: "/v1/graphql", description: "GraphQL query", price: "0.005", resolveUpstream: () => "https://api.linear.app/graphql", resolveHeaders: () => ({ authorization: process.env.LINEAR_API_KEY }) },
+
+  // Airtable
+  { service: "airtable", path: "/v1/bases/:baseId/:tableId", description: "List records", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://api.airtable.com/v0/${p.baseId}/${p.tableId}`, resolveHeaders: () => ({ authorization: bearer("AIRTABLE_API_KEY") }) },
+
+  // Clearbit
+  { service: "clearbit", path: "/v1/people/find", description: "Enrich person by email", price: "0.02", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://person.clearbit.com/v2/people/find", resolveHeaders: () => ({ authorization: bearer("CLEARBIT_API_KEY") }) },
+  { service: "clearbit", path: "/v1/companies/find", description: "Enrich company by domain", price: "0.02", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://company.clearbit.com/v2/companies/find", resolveHeaders: () => ({ authorization: bearer("CLEARBIT_API_KEY") }) },
+
+  // Wolfram Alpha
+  { service: "wolfram", path: "/v1/query", description: "Full computation query", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => `https://api.wolframalpha.com/v2/query?appid=${process.env.WOLFRAM_APP_ID ?? ""}&output=json`, resolveHeaders: () => jsonAccept },
+  { service: "wolfram", path: "/v1/short", description: "Short answer", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => `https://api.wolframalpha.com/v1/result?appid=${process.env.WOLFRAM_APP_ID ?? ""}`, resolveHeaders: () => ({}) },
+
+  // Polygon.io
+  { service: "polygon", path: "/v1/prev/:ticker", description: "Previous close", price: "0.005", upstreamMethod: "GET", resolveUpstream: (p) => `https://api.polygon.io/v2/aggs/ticker/${p.ticker}/prev?apiKey=${process.env.POLYGON_API_KEY ?? ""}`, resolveHeaders: () => jsonAccept },
+  { service: "polygon", path: "/v1/tickers", description: "Ticker search", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => `https://api.polygon.io/v3/reference/tickers?apiKey=${process.env.POLYGON_API_KEY ?? ""}`, resolveHeaders: () => jsonAccept },
+
+  // OpenRouter
+  { service: "openrouter", path: "/v1/chat/completions", description: "Chat completions (any model)", price: "0.01", resolveUpstream: () => "https://openrouter.ai/api/v1/chat/completions", resolveHeaders: () => ({ authorization: bearer("OPENROUTER_API_KEY") }) },
+  { service: "openrouter", path: "/v1/models", description: "List available models", price: "0.001", upstreamMethod: "GET", resolveUpstream: () => "https://openrouter.ai/api/v1/models", resolveHeaders: () => ({ authorization: bearer("OPENROUTER_API_KEY") }) },
+
+  // Crunchbase
+  { service: "crunchbase", path: "/v1/organizations/:permalink", description: "Organization lookup", price: "0.02", upstreamMethod: "GET", resolveUpstream: (p) => `https://api.crunchbase.com/api/v4/entities/organizations/${p.permalink}`, resolveHeaders: () => ({ "x-cb-user-key": process.env.CRUNCHBASE_API_KEY }) },
+
+  // Tavily
+  { service: "tavily", path: "/v1/search", description: "AI search", price: "0.005", resolveUpstream: () => "https://api.tavily.com/search", resolveHeaders: () => ({}) },
+  { service: "tavily", path: "/v1/extract", description: "Extract URL content", price: "0.005", resolveUpstream: () => "https://api.tavily.com/extract", resolveHeaders: () => ({}) },
+
+  // Pinecone
+  { service: "pinecone", path: "/v1/query", description: "Query vectors", price: "0.005", requiredEnv: ["PINECONE_API_KEY", "PINECONE_INDEX_HOST"], resolveUpstream: () => `https://${process.env.PINECONE_INDEX_HOST}/query`, resolveHeaders: () => ({ "api-key": process.env.PINECONE_API_KEY }) },
+  { service: "pinecone", path: "/v1/vectors/upsert", description: "Upsert vectors", price: "0.005", requiredEnv: ["PINECONE_API_KEY", "PINECONE_INDEX_HOST"], resolveUpstream: () => `https://${process.env.PINECONE_INDEX_HOST}/vectors/upsert`, resolveHeaders: () => ({ "api-key": process.env.PINECONE_API_KEY }) },
 ];
 
 // ── Filter to enabled services ──
