@@ -1,9 +1,27 @@
 import { createSolanaRpc, signature as toSignature } from "@solana/kit";
 import type { VerifyResult } from "../types/index.js";
+import { USDC_MINT, USDC_DECIMALS, SOL_DECIMALS } from "../constants.js";
 
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-const USDC_DECIMALS = 6;
-const SOL_DECIMALS = 9;
+// ── RPC response types ──
+
+interface ParsedTransactionMeta {
+  err: unknown;
+  preTokenBalances?: TokenBalance[];
+  postTokenBalances?: TokenBalance[];
+  innerInstructions?: { index: number; instructions: ParsedInstruction[] }[];
+}
+
+interface ParsedTransactionResponse {
+  blockTime?: number;
+  meta: ParsedTransactionMeta | null;
+  transaction?: {
+    message?: {
+      instructions?: ParsedInstruction[];
+      accountKeys?: { pubkey: string }[];
+    };
+  };
+}
+
 const MAX_RETRIES = 40;
 const RETRY_INTERVAL_MS = 100;
 const MAX_TX_AGE_SECONDS = 300; // 5 minutes
@@ -21,6 +39,7 @@ interface ParsedInstruction {
   programId: string;
   parsed?: {
     type: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC returns dynamic shapes
     info: Record<string, any>;
   };
 }
@@ -156,7 +175,7 @@ export function createVerifier(
    * One call does both: confirms finality AND returns parsed tx.
    * Equivalent to Sui's getTransactionBlock().
    */
-  async function fetchTransaction(sig: string): Promise<any> {
+  async function fetchTransaction(sig: string): Promise<ParsedTransactionResponse | null> {
     const txSignature = toSignature(sig);
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -168,7 +187,7 @@ export function createVerifier(
             maxSupportedTransactionVersion: 0,
           })
           .send();
-        if (tx) return tx;
+        if (tx) return tx as unknown as ParsedTransactionResponse;
       } catch {
         // RPC error or not yet indexed, retry
       }
@@ -178,7 +197,7 @@ export function createVerifier(
     return null;
   }
 
-  function checkTxBasics(tx: any): string | null {
+  function checkTxBasics(tx: ParsedTransactionResponse): string | null {
     if (tx.meta?.err) return "Transaction failed on-chain";
     if (tx.blockTime) {
       const age = Math.floor(Date.now() / 1000) - Number(tx.blockTime);

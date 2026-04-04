@@ -5,7 +5,7 @@ import type { RedisStore } from "../db/redis.js";
 import type { Database } from "../db/postgres.js";
 import type { SolanaNetwork } from "../verify/solana.js";
 
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+import { USDC_MINT } from "../constants.js";
 
 interface MppDeps {
   verifier: {
@@ -113,7 +113,7 @@ export function createMppMiddleware(deps: MppDeps) {
         status: "success",
         createdAt: new Date(),
       })
-      .catch(() => {});
+      .catch((err) => console.error("[mpp] failed to log transaction:", err));
 
     // Store route for proxy handler
     c.set("route", route);

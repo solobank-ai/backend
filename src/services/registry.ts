@@ -1,6 +1,6 @@
 import type { GatewayRouteConfig, ResolvedGatewayRoute, ServiceMeta, EndpointDefinition } from "../types/index.js";
 
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+import { USDC_MINT } from "../constants.js";
 
 // ── Service metadata ──
 
@@ -52,7 +52,9 @@ export const enabledServiceIds = new Set([
 // ── Helpers ──
 
 function bearer(envName: string) {
-  return `Bearer ${process.env[envName] ?? ""}`;
+  const key = process.env[envName];
+  if (!key) throw new Error(`Missing API key: ${envName}`);
+  return `Bearer ${key}`;
 }
 
 const jsonAccept = { accept: "application/json" };
