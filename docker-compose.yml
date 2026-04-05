@@ -1,30 +1,13 @@
 services:
-  # ── Devnet (testing) ──
-  app-devnet:
+  app:
     build: .
     restart: unless-stopped
     dns:
       - 8.8.8.8
       - 1.1.1.1
     ports:
-      - "3001:3001"
-    env_file: .env.devnet
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  # ── Mainnet (production) ──
-  app-mainnet:
-    build: .
-    restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    ports:
-      - "3002:3002"
-    env_file: .env.mainnet
+      - "${PORT:-3001}:${PORT:-3001}"
+    env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
