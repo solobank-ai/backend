@@ -43,7 +43,7 @@ const UPSTREAM_COSTS: PriceCheck[] = [
   { service: "AssemblyAI", endpoint: "/v1/transcribe", ourPrice: 0.02, upstreamCost: 0.0025 },
 
   // Search
-  { service: "Brave Search", endpoint: "/v1/web/search", ourPrice: 0.005, upstreamCost: 0.005 },
+  { service: "Brave Search", endpoint: "/v1/web/search", ourPrice: 0.007, upstreamCost: 0.005 },
   { service: "Perplexity Sonar", endpoint: "/v1/chat/completions", ourPrice: 0.01, upstreamCost: 0.0057 },
 
   // Translation
@@ -66,7 +66,7 @@ async function sendTelegram(text: string): Promise<void> {
   await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: TG_CHAT_ID, text, parse_mode: "HTML" }),
+    body: JSON.stringify({ chat_id: TG_CHAT_ID, text, parse_mode: "Markdown" }),
   });
 }
 
