@@ -213,8 +213,8 @@ const allGatewayRoutes: GatewayRouteConfig[] = [
   { service: "serpapi", path: "/v1/flights", description: "SerpApi Google Flights", price: "0.01", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => `https://serpapi.com/search.json?engine=google_flights&api_key=${process.env.SERPAPI_API_KEY ?? ""}`, resolveHeaders: () => jsonAccept },
 
   // NewsAPI
-  { service: "newsapi", path: "/v1/headlines", description: "Top headlines", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://newsapi.org/v2/top-headlines", resolveHeaders: () => ({ "x-api-key": process.env.NEWSAPI_API_KEY }) },
-  { service: "newsapi", path: "/v1/search", description: "Article search", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://newsapi.org/v2/everything", resolveHeaders: () => ({ "x-api-key": process.env.NEWSAPI_API_KEY }) },
+  { service: "newsapi", path: "/v1/headlines", description: "Top headlines", price: "0.02", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://newsapi.org/v2/top-headlines", resolveHeaders: () => ({ "x-api-key": process.env.NEWSAPI_API_KEY }) },
+  { service: "newsapi", path: "/v1/search", description: "Article search", price: "0.02", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => "https://newsapi.org/v2/everything", resolveHeaders: () => ({ "x-api-key": process.env.NEWSAPI_API_KEY }) },
 
   // Alpha Vantage
   { service: "alphavantage", path: "/v1/quote", description: "Global quote", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&apikey=${process.env.ALPHAVANTAGE_API_KEY ?? ""}`, resolveHeaders: () => jsonAccept },
@@ -240,15 +240,15 @@ const allGatewayRoutes: GatewayRouteConfig[] = [
   { service: "translate", path: "/v1/detect", description: "Detect language", price: "0.005", upstreamMethod: "GET", bodyToQuery: true, resolveUpstream: () => `https://translation.googleapis.com/language/translate/v2/detect?key=${process.env.GOOGLE_TRANSLATE_API_KEY ?? ""}`, resolveHeaders: () => ({}) },
 
   // DeepL
-  { service: "deepl", path: "/v1/translate", description: "DeepL translation", price: "0.005", resolveUpstream: () => "https://api.deepl.com/v2/translate", resolveHeaders: () => ({ authorization: `DeepL-Auth-Key ${process.env.DEEPL_API_KEY ?? ""}` }) },
+  { service: "deepl", path: "/v1/translate", description: "DeepL translation", price: "0.03", resolveUpstream: () => "https://api.deepl.com/v2/translate", resolveHeaders: () => ({ authorization: `DeepL-Auth-Key ${process.env.DEEPL_API_KEY ?? ""}` }) },
 
   // Resend
   { service: "resend", path: "/v1/emails", description: "Send one email", price: "0.005", resolveUpstream: () => "https://api.resend.com/emails", resolveHeaders: () => ({ authorization: bearer("RESEND_API_KEY") }) },
   { service: "resend", path: "/v1/emails/batch", description: "Send batch emails", price: "0.01", resolveUpstream: () => "https://api.resend.com/emails/batch", resolveHeaders: () => ({ authorization: bearer("RESEND_API_KEY") }) },
 
   // ElevenLabs
-  { service: "elevenlabs", path: "/v1/sound-generation", description: "Sound generation", price: "0.05", resolveUpstream: () => "https://api.elevenlabs.io/v1/sound-generation", resolveHeaders: () => ({ "xi-api-key": process.env.ELEVENLABS_API_KEY }) },
-  { service: "elevenlabs", path: "/v1/text-to-speech/:voiceId", description: "Text to speech", price: "0.05", resolveUpstream: (p) => `https://api.elevenlabs.io/v1/text-to-speech/${p.voiceId}`, resolveHeaders: () => ({ "xi-api-key": process.env.ELEVENLABS_API_KEY }) },
+  { service: "elevenlabs", path: "/v1/sound-generation", description: "Sound generation", price: "0.08", resolveUpstream: () => "https://api.elevenlabs.io/v1/sound-generation", resolveHeaders: () => ({ "xi-api-key": process.env.ELEVENLABS_API_KEY }) },
+  { service: "elevenlabs", path: "/v1/text-to-speech/:voiceId", description: "Text to speech", price: "0.08", resolveUpstream: (p) => `https://api.elevenlabs.io/v1/text-to-speech/${p.voiceId}`, resolveHeaders: () => ({ "xi-api-key": process.env.ELEVENLABS_API_KEY }) },
 
   // AssemblyAI
   { service: "assemblyai", path: "/v1/transcribe", description: "Create transcript job", price: "0.02", resolveUpstream: () => "https://api.assemblyai.com/v2/transcript", resolveHeaders: () => ({ authorization: process.env.ASSEMBLYAI_API_KEY }) },
@@ -279,9 +279,9 @@ const allGatewayRoutes: GatewayRouteConfig[] = [
   { service: "pdfshift", path: "/v1/convert", description: "Convert HTML to PDF", price: "0.01", resolveUpstream: () => "https://api.pdfshift.io/v3/convert/pdf", resolveHeaders: () => ({ "x-api-key": process.env.PDFSHIFT_API_KEY }) },
 
   // Stability AI
-  { service: "stability", path: "/v1/generate/sd3", description: "SD3 image generation", price: "0.03", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/sd3", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
-  { service: "stability", path: "/v1/generate/core", description: "Stable Image Core", price: "0.03", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/core", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
-  { service: "stability", path: "/v1/generate/ultra", description: "Stable Image Ultra", price: "0.05", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/ultra", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
+  { service: "stability", path: "/v1/generate/sd3", description: "SD3 image generation", price: "0.08", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/sd3", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
+  { service: "stability", path: "/v1/generate/core", description: "Stable Image Core", price: "0.05", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/core", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
+  { service: "stability", path: "/v1/generate/ultra", description: "Stable Image Ultra", price: "0.10", resolveUpstream: () => "https://api.stability.ai/v2beta/stable-image/generate/ultra", resolveHeaders: () => ({ authorization: bearer("STABILITY_API_KEY") }) },
 
   // Hugging Face
   { service: "huggingface", path: "/v1/models/:modelId", description: "Run model inference", price: "0.005", resolveUpstream: (p) => `https://api-inference.huggingface.co/models/${p.modelId}`, resolveHeaders: () => ({ authorization: bearer("HUGGINGFACE_API_KEY") }) },
