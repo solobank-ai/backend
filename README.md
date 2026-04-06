@@ -1,8 +1,11 @@
-# MPP Gateway
+# Solobank Gateway
 
-Solana-powered pay-per-call API proxy. Agents pay with on-chain transactions, gateway verifies and forwards requests to upstream providers.
+Solana-powered pay-per-call API proxy. Agents pay with on-chain USDC transactions, the gateway verifies and forwards requests to 51 upstream providers.
 
-[![CI](https://github.com/decentrathon/backend/actions/workflows/ci.yml/badge.svg)](https://github.com/decentrathon/backend/actions/workflows/ci.yml)
+[![CI](https://github.com/solobank-ai/backend/actions/workflows/ci.yml/badge.svg)](https://github.com/solobank-ai/backend/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Live at [mpp.solobank.lol](https://mpp.solobank.lol)
 
 ## How It Works
 
@@ -10,23 +13,30 @@ Solana-powered pay-per-call API proxy. Agents pay with on-chain transactions, ga
 Agent                              Gateway                         Provider
   |                                  |                                |
   |-- POST /openai/v1/chat --------->|                                |
-  |<--------- 402 + challenge -------|                                |
+  |<--------- 402 + price ----------|                                |
   |                                  |                                |
-  |-- pay on Solana (USDC/SOL) ----->| (devnet RPC)                   |
+  |-- pay USDC on Solana ----------->| (Helius RPC)                   |
   |                                  |                                |
   |-- POST + x-payment-signature --->|                                |
   |                                  |-- verify on-chain ------------>|
   |                                  |-- mark signature (Redis) ----->|
-  |                                  |-- forward to OpenAI ---------->|
+  |                                  |-- forward to provider -------->|
   |<--------- 200 + response -------|<--------- response ------------|
-  |                                  |                                |
-  |-- POST (same sig) ------------->|                                |
-  |<--------- 409 Conflict ---------|  (replay protection)           |
 ```
 
-## Supported Providers
+## Supported Providers (51)
 
-OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, Perplexity, Together AI, Cohere, fal.ai, ElevenLabs, AssemblyAI, Replicate, Firecrawl, Brave Search, Exa, Serper, SerpApi, NewsAPI, CoinGecko, Alpha Vantage, Google Maps, Google Translate, DeepL, OpenWeather, Hunter, IPinfo, Jina, Resend, PDFShift, ScreenshotOne, and more.
+**LLMs**: OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, Perplexity, Together AI, Cohere
+
+**Media**: fal.ai, ElevenLabs, AssemblyAI, Replicate
+
+**Search**: Brave Search, Exa, Serper, SerpApi, Firecrawl, Jina
+
+**Data**: CoinGecko, Alpha Vantage, NewsAPI, OpenWeather, IPinfo
+
+**Productivity**: Google Maps, Google Translate, DeepL, Resend, Hunter, PDFShift, ScreenshotOne
+
+...and more.
 
 ## Quick Start
 
@@ -41,45 +51,46 @@ docker compose up -d    # Start gateway + PostgreSQL + Redis
 |----------|----------|-------------|
 | `RECIPIENT_WALLET` | Yes | Solana wallet to receive payments |
 | `SOLANA_NETWORK` | No | `mainnet-beta` (default) or `devnet` |
-| `SOLANA_RPC_URL` | No | Custom RPC endpoint |
+| `SOLANA_RPC_URL` | No | Helius RPC endpoint |
 | `REDIS_URL` | No | Redis connection (default: `redis://localhost:6379`) |
 | `DATABASE_URL` | No | PostgreSQL connection |
 | `OPENAI_API_KEY` | No | Enable OpenAI endpoints |
 | `ANTHROPIC_API_KEY` | No | Enable Anthropic endpoints |
-| ... | No | Add API keys for each provider |
+
+Add API keys for any provider you want to serve.
 
 ## API
 
-### Public
+### Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health check |
 | `GET /status` | Detailed status (network, providers, DB) |
 | `GET /services` | Available services and pricing |
-| `POST /:service/*` | Proxied API call (requires payment) |
+| `POST /:service/*` | Proxied API call (requires MPP payment) |
 
-### Payment Flow
+### Payment Flow (MPP 402)
 
-1. `POST /:service/endpoint` without signature -> `402` with challenge
-2. Pay on-chain (USDC on mainnet, SOL on devnet)
+1. `POST /:service/endpoint` without payment -> `402` with price
+2. Agent pays USDC on Solana (SOL on devnet)
 3. Retry with `x-payment-signature: <tx-signature>` -> `200`
-4. Same signature again -> `409 Conflict`
+4. Same signature again -> `409 Conflict` (replay protection)
 
 ## Payment Verification
 
-- **Mainnet**: USDC spl-token `transferChecked` instructions + balance delta cross-check
+- **Mainnet**: USDC `transferChecked` instruction verification + balance delta cross-check
 - **Devnet**: SOL system `transfer` instructions
-- **Security**: Instruction-level verification, TX age limit (5 min), atomic replay protection (Redis + PostgreSQL UNIQUE)
+- **Security**: Instruction-level parsing, TX age limit (5 min), atomic replay protection (Redis + PostgreSQL UNIQUE)
 
 ## Development
 
 ```bash
 npm install
-npm run typecheck   # Type checking
-npm test            # 57 unit tests
-npm run build       # Build TypeScript
-npm run dev         # Dev server with hot reload
+npm run dev             # Dev server with hot reload
+npm run build           # Build TypeScript
+npm run typecheck       # Type checking
+npm test                # 57 unit tests
 ```
 
 ## Architecture
@@ -98,13 +109,20 @@ src/
 
 ## Tech Stack
 
-- `hono` — HTTP framework
-- `@solana/kit` — Solana RPC and signature handling
-- `postgres` — PostgreSQL client
-- `ioredis` — Redis client
-- `zod` — Environment validation
-- `vitest` — Testing
-- Docker + Docker Compose — Deployment
+- **Server**: Hono
+- **Blockchain**: `@solana/kit` (Helius RPC)
+- **Database**: PostgreSQL (`postgres`)
+- **Cache**: Redis (`ioredis`)
+- **Validation**: Zod
+- **Testing**: Vitest
+- **Deploy**: Docker + Docker Compose, GitHub Actions CI/CD
+
+## Related Repos
+
+- [solobank-ai/package](https://github.com/solobank-ai/package) -- SDK + MCP + CLI monorepo
+- [solobank-ai/mpp-solana](https://github.com/solobank-ai/mpp-solana) -- Solana MPP payment method
+- [solobank-ai/solobank_frontend](https://github.com/solobank-ai/solobank_frontend) -- Website
+- [solobank-ai/prices-tracker-bot](https://github.com/solobank-ai/prices-tracker-bot) -- Margin monitor
 
 ## License
 
