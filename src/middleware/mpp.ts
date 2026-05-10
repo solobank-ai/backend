@@ -90,21 +90,22 @@ export function createMppMiddleware(deps: MppDeps) {
       }, 402);
     }
 
-    // 2. Atomic replay protection AFTER successful verification
-    //    If this fails, the signature was already used — no money lost
-    let isNew: boolean;
+    // 2. Atomic replay protection: DB UNIQUE(signature) is authoritative.
+    //    Redis is best-effort fast-path; the DB INSERT is the durable check
+    //    and MUST complete before forwarding to upstream.
+    let redisIsNew = true;
     try {
-      isNew = await deps.redis.tryMarkUsed(signature);
-    } catch {
-      return c.json({ error: "Service temporarily unavailable" }, 503);
+      redisIsNew = await deps.redis.tryMarkUsed(signature);
+    } catch (err) {
+      console.error("[mpp] redis tryMarkUsed failed, falling back to DB:", err);
     }
-    if (!isNew) {
+    if (!redisIsNew) {
       return c.json({ error: "Transaction signature already used" }, 409);
     }
 
-    // Log transaction (fire-and-forget, also serves as fallback replay check via UNIQUE constraint)
-    deps.db
-      .logTransaction({
+    let dbIsNew: boolean;
+    try {
+      dbIsNew = await deps.db.tryInsertTransaction({
         signature,
         service: route.service,
         endpoint: route.path,
@@ -112,8 +113,14 @@ export function createMppMiddleware(deps: MppDeps) {
         agentAddress: result.senderAddress ?? "unknown",
         status: "success",
         createdAt: new Date(),
-      })
-      .catch((err) => console.error("[mpp] failed to log transaction:", err));
+      });
+    } catch (err) {
+      console.error("[mpp] failed to insert transaction:", err);
+      return c.json({ error: "Service temporarily unavailable" }, 503);
+    }
+    if (!dbIsNew) {
+      return c.json({ error: "Transaction signature already used" }, 409);
+    }
 
     // Store route for proxy handler
     c.set("route", route);

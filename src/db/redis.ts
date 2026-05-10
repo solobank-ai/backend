@@ -2,7 +2,9 @@ import Redis from "ioredis";
 const RedisClient = (Redis as any).default ?? Redis;
 
 const TX_PREFIX = "mpp:tx:";
-const TX_TTL = 86400; // 24 hours
+// Match verifier MAX_TX_AGE (300s) plus margin for clock skew. DB UNIQUE is
+// the authoritative replay defense; this is just a fast-path cache.
+const TX_TTL = 600; // 10 minutes
 
 export function createRedisClient(url: string) {
   const redis = new RedisClient(url, { maxRetriesPerRequest: 3 });

@@ -4,8 +4,10 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
+import { timingSafeEqual } from "node:crypto";
 
 import { env } from "./config/env.js";
+import { createRateLimiter } from "./middleware/rateLimit.js";
 import { createVerifier } from "./verify/solana.js";
 import { createRedisClient } from "./db/redis.js";
 import { createDb } from "./db/postgres.js";
@@ -101,15 +103,15 @@ function getProviderSummary() {
 
 const app = new Hono<{ Variables: MppVariables }>();
 
-// CORS — restrict origins if configured
+// CORS — strict whitelist; default-deny if not configured
 const origins = env.ALLOWED_ORIGINS
-  ? env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : ["*"];
+  ? env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+  : [];
 
 app.use(
   "*",
   cors({
-    origin: origins.includes("*") ? "*" : origins,
+    origin: (incoming) => (origins.includes(incoming) ? incoming : null),
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: [
       "Content-Type",
@@ -119,6 +121,9 @@ app.use(
     ],
   }),
 );
+
+// Per-IP rate limit on all routes (DoS protection)
+app.use("*", createRateLimiter({ windowMs: 60_000, max: env.RATE_LIMIT_RPM }));
 
 app.use("*", logger());
 
@@ -191,12 +196,22 @@ app.get("/status", async (c) => {
 });
 
 // Admin-only routes (require ADMIN_TOKEN via Bearer auth)
+// Fail-closed: if ADMIN_TOKEN is not set, all admin routes return 503.
+const adminTokenBuf = env.ADMIN_TOKEN
+  ? Buffer.from(`Bearer ${env.ADMIN_TOKEN}`)
+  : null;
+
 const adminAuth = createMiddleware(async (c, next) => {
-  if (env.ADMIN_TOKEN) {
-    const auth = c.req.header("authorization");
-    if (auth !== `Bearer ${env.ADMIN_TOKEN}`) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+  if (!adminTokenBuf) {
+    return c.json({ error: "Admin endpoints disabled (ADMIN_TOKEN not set)" }, 503);
+  }
+  const header = c.req.header("authorization") ?? "";
+  const headerBuf = Buffer.from(header);
+  if (
+    headerBuf.length !== adminTokenBuf.length ||
+    !timingSafeEqual(headerBuf, adminTokenBuf)
+  ) {
+    return c.json({ error: "Unauthorized" }, 401);
   }
   await next();
 });
@@ -229,8 +244,11 @@ app.all("/:service/*", mpp, async (c) => {
   // bodyToQuery: convert POST body to query params for GET upstreams
   // Block keys that could override auth params already in the URL
   const BLOCKED_QUERY_KEYS = new Set([
-    "api_key", "apikey", "key", "token", "access_key",
-    "x_cg_demo_api_key", "appid", "callback", "webhook",
+    "api_key", "apikey", "key", "token", "access_key", "access_token",
+    "auth", "auth_token", "authorization", "bearer",
+    "x_cg_demo_api_key", "x-api-key", "x_api_key",
+    "appid", "app_id", "app_key", "appkey",
+    "secret", "client_secret", "callback", "webhook",
   ]);
 
   if (route.bodyToQuery && bodyText) {

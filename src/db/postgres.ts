@@ -42,6 +42,20 @@ export function createDb(url: string) {
       `;
     },
 
+    /**
+     * Atomic insert: returns true if signature was new, false if already used.
+     * Authoritative replay-protection check (UNIQUE constraint enforced).
+     */
+    async tryInsertTransaction(log: TransactionLog): Promise<boolean> {
+      const rows = await sql`
+        INSERT INTO transactions (signature, service, endpoint, amount_usd, agent_address, status)
+        VALUES (${log.signature}, ${log.service}, ${log.endpoint}, ${log.amountUsd}, ${log.agentAddress}, ${log.status})
+        ON CONFLICT (signature) DO NOTHING
+        RETURNING id
+      `;
+      return rows.length > 0;
+    },
+
     async getStats(query?: StatsQuery): Promise<StatsResult> {
       const period = query?.period ?? "24h";
       const intervalMap: Record<string, string> = {

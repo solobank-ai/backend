@@ -10,6 +10,8 @@ function createMockDeps(overrides: Partial<{
   network: "devnet" | "mainnet-beta";
   tryMarkUsedResult: boolean;
   tryMarkUsedThrows: boolean;
+  tryInsertResult: boolean;
+  tryInsertThrows: boolean;
 }> = {}) {
   const {
     verifyResult = { valid: true, transferredRaw: 10_000_000n, senderAddress: "SenderAddr" },
@@ -17,6 +19,8 @@ function createMockDeps(overrides: Partial<{
     network = "devnet",
     tryMarkUsedResult = true,
     tryMarkUsedThrows = false,
+    tryInsertResult = true,
+    tryInsertThrows = false,
   } = overrides;
 
   return {
@@ -36,6 +40,9 @@ function createMockDeps(overrides: Partial<{
     db: {
       initialize: vi.fn().mockResolvedValue(undefined),
       logTransaction: vi.fn().mockResolvedValue(undefined),
+      tryInsertTransaction: tryInsertThrows
+        ? vi.fn().mockRejectedValue(new Error("DB down"))
+        : vi.fn().mockResolvedValue(tryInsertResult),
       getStats: vi.fn(),
       getMppStats: vi.fn(),
       healthcheck: vi.fn(),
@@ -161,7 +168,7 @@ describe("MPP Middleware", () => {
     expect(body.route).toBe("openai");
     expect(deps.verifier.verify).toHaveBeenCalledWith(VALID_SIG, "0.01");
     expect(deps.redis.tryMarkUsed).toHaveBeenCalledWith(VALID_SIG);
-    expect(deps.db.logTransaction).toHaveBeenCalled();
+    expect(deps.db.tryInsertTransaction).toHaveBeenCalled();
   });
 
   it("returns 402 when verification fails", async () => {
@@ -202,9 +209,29 @@ describe("MPP Middleware", () => {
     expect(body.error).toContain("already used");
   });
 
-  it("returns 503 when Redis is down", async () => {
+  it("falls back to DB when Redis is down (still succeeds if DB insert is new)", async () => {
     mockResolve.mockReturnValue({ service: "openai", path: "/v1/chat", price: "0.01", params: {} });
     const app = buildApp(createMockDeps({ tryMarkUsedThrows: true }));
+    const res = await app.request("/openai/v1/chat", {
+      method: "POST",
+      headers: { "x-payment-signature": VALID_SIG },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 409 when DB insert reports duplicate (replay caught by UNIQUE)", async () => {
+    mockResolve.mockReturnValue({ service: "openai", path: "/v1/chat", price: "0.01", params: {} });
+    const app = buildApp(createMockDeps({ tryInsertResult: false }));
+    const res = await app.request("/openai/v1/chat", {
+      method: "POST",
+      headers: { "x-payment-signature": VALID_SIG },
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 503 when DB is down", async () => {
+    mockResolve.mockReturnValue({ service: "openai", path: "/v1/chat", price: "0.01", params: {} });
+    const app = buildApp(createMockDeps({ tryInsertThrows: true }));
     const res = await app.request("/openai/v1/chat", {
       method: "POST",
       headers: { "x-payment-signature": VALID_SIG },

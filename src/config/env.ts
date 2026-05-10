@@ -1,12 +1,14 @@
 import dotenv from "dotenv";
-dotenv.config({ override: true });
+dotenv.config({ override: false });
 
 import { z } from "zod";
 
+const isProd = process.env.NODE_ENV === "production";
+
 const envSchema = z.object({
   // Solana
-  SOLANA_RPC_URL: z.string().url().default("https://api.mainnet-beta.solana.com"),
-  SOLANA_NETWORK: z.enum(["mainnet-beta", "devnet"]).default("mainnet-beta"),
+  SOLANA_RPC_URL: z.string().url().default("https://api.devnet.solana.com"),
+  SOLANA_NETWORK: z.enum(["mainnet-beta", "devnet"]).default("devnet"),
   RECIPIENT_WALLET: z.string().min(32, "RECIPIENT_WALLET is required"),
 
   // API Keys (optional — only needed for enabled services)
@@ -55,7 +57,12 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3001),
   ALLOWED_ORIGINS: z.string().optional(),
   MAX_BODY_SIZE_MB: z.coerce.number().default(10),
-  ADMIN_TOKEN: z.string().optional(),
+  ADMIN_TOKEN: isProd
+    ? z.string().min(32, "ADMIN_TOKEN must be at least 32 chars in production")
+    : z.string().min(32).optional(),
+  REDIS_PASSWORD: z.string().optional(),
+  RATE_LIMIT_RPM: z.coerce.number().default(60),
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 
 const parsed = envSchema.safeParse(process.env);

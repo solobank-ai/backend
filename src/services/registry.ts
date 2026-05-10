@@ -362,13 +362,27 @@ export const gatewayRoutes = allGatewayRoutes.filter((r) => enabledServiceIds.ha
 
 // ── Path matching with :param support ──
 
-/** Reject path params containing traversal or internal-network patterns */
+/**
+ * Strict whitelist for path params. Allow only chars that are safe to embed
+ * in an upstream URL path segment without changing URL semantics.
+ *
+ * Rejects: `?`, `#`, `&`, `@`, `\`, `:`, `/`, `%`, control chars, anything
+ * that could smuggle userinfo, query, fragment, or alternate hosts.
+ */
+// Allow alnum + `._~-` (RFC 3986 unreserved) plus `,` (multi-id lists) and `:` (IPv6).
+// Disallows `/ ? # & @ \ %` and any control chars.
+const PATH_PARAM_RE = /^[A-Za-z0-9._~,:-]{1,256}$/;
+
 function sanitizeParam(value: string): string | null {
-  const decoded = decodeURIComponent(value);
-  // Block path traversal
-  if (decoded.includes("..") || decoded.includes("//")) return null;
-  // Block SSRF to internal networks
-  if (/^https?:\/\/(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|localhost|\[::1\])/i.test(decoded)) return null;
+  // Decode once to detect smuggled encodings; if it differs, reject.
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+  if (decoded !== value) return null;
+  if (!PATH_PARAM_RE.test(decoded)) return null;
   return decoded;
 }
 

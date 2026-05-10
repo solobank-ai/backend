@@ -96,19 +96,6 @@ function extractUsdcTransfers(
   return transfers;
 }
 
-function getRecipientAtas(
-  postTokenBalances: TokenBalance[],
-  recipient: string,
-): Set<string> {
-  const atas = new Set<string>();
-  for (const bal of postTokenBalances) {
-    if (bal.owner === recipient && bal.mint === USDC_MINT) {
-      atas.add(String(bal.accountIndex));
-    }
-  }
-  return atas;
-}
-
 // ── Balance delta verification (fallback & cross-check) ──
 
 function sumReceivedAmount(
@@ -228,7 +215,6 @@ export function createVerifier(
 
     const balanceDelta = sumReceivedAmount(pre, post, recipientAddress);
 
-    const recipientAtas = getRecipientAtas(post, recipientAddress);
     const accountKeys: { pubkey: string }[] =
       tx.transaction?.message?.accountKeys ?? [];
 
