@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.8",
+    "@hono/node-server": "^2.0.2",
+    "@solana-program/token": "^0.13.0",
     "@solana/kit": "^2.1.0",
-    "@solana/spl-token": "^0.4.14",
     "bs58": "^6.0.0",
     "dotenv": "^16.4.7",
     "hono": "^4.7.6",
