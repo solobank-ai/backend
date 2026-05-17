@@ -5,7 +5,7 @@ Solana-powered pay-per-call API proxy. Agents pay with on-chain USDC transaction
 [![CI](https://github.com/solobank-ai/backend/actions/workflows/ci.yml/badge.svg)](https://github.com/solobank-ai/backend/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Live at [mpp.solobank.lol](https://mpp.solobank.lol)
+Live at [mpp.solobank.ink](https://mpp.solobank.ink)
 
 ## How It Works
 
